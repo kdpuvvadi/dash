@@ -186,7 +186,9 @@ button {
   font-weight: 600;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  white-space: nowrap;
+  line-height: 1.2;
 }
 
 .summary-item .dot {
@@ -196,18 +198,11 @@ button {
   background: var(--accent);
 }
 
-.summary-pct {
+.summary-pct,
+.summary-sep {
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
-  margin-left: 6px;
-}
-
-.net-v {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  font-size: 0.95rem;
 }
 
 .section-head {
@@ -361,15 +356,8 @@ button {
 }
 
 .host-metrics .metric-value {
-  font-size: 1.25rem;
-}
-
-.host-metrics .net-split {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 0.95rem;
-  letter-spacing: -0.02em;
+  font-size: 1.15rem;
+  white-space: nowrap;
 }
 
 .host-metrics .spark {

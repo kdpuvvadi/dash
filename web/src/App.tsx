@@ -137,9 +137,10 @@ export default function App() {
         </div>
         <div className="summary-item">
           <div className="k">Network</div>
-          <div className="v net-v">
-            <span>↓ {summary?.net_rx_human || formatRate(summary?.net_rx_bps)}</span>
-            <span>↑ {summary?.net_tx_human || formatRate(summary?.net_tx_bps)}</span>
+          <div className="v">
+            ↓ {summary?.net_rx_human || formatRate(summary?.net_rx_bps)}
+            <span className="summary-sep">·</span>
+            ↑ {summary?.net_tx_human || formatRate(summary?.net_tx_bps)}
           </div>
         </div>
         <div className="summary-item">
@@ -381,9 +382,8 @@ function HostCard({
         </div>
         <div>
           <div className="metric-label">Network</div>
-          <div className="metric-value net-split" style={{ color: accent }}>
-            <span>↓ {formatRate(host.net_rx_bps)}</span>
-            <span>↑ {formatRate(host.net_tx_bps)}</span>
+          <div className="metric-value" style={{ color: accent }}>
+            ↓ {formatRate(host.net_rx_bps)} · ↑ {formatRate(host.net_tx_bps)}
           </div>
         </div>
       </div>
