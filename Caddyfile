@@ -1,24 +1,16 @@
 {
 	email {$CADDY_EMAIL}
-	acme_dns cloudflare {
-		api_token {env.CLOUDFLARE_API_TOKEN}
-	}
 }
 
-(tls_resolvers) {
+# dns.puvvadi.net is split-horizon BIND (not a Cloudflare zone), so ACME DNS-01
+# is aliased into the public puvvadi.net zone:
+#   CF CNAME: _acme-challenge.dash.dns → _acme-challenge.dash-acme.puvvadi.net
+dash.dns.puvvadi.net {
 	tls {
-		resolvers 10.10.10.10
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+		dns_challenge_override_domain dash-acme.puvvadi.net
+		propagation_delay 2m
+		resolvers 1.1.1.1
 	}
-}
-
-# Apex zone exists in Cloudflare.
-puvvadi.net {
-	import tls_resolvers
-	respond "ok" 200
-}
-
-# App host on the puvvadi.net zone (dns.puvvadi.net is not a CF zone — skip until it is).
-dash.puvvadi.net {
-	import tls_resolvers
 	reverse_proxy dash:8080
 }
