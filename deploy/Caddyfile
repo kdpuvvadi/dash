@@ -4,19 +4,25 @@
 	acme_dns cloudflare {
 		api_token {env.CLOUDFLARE_API_TOKEN}
 	}
-	servers {
+}
+
+(tls_resolvers) {
+	tls {
 		resolvers 10.10.10.10
 	}
 }
 
 puvvadi.net {
+	import tls_resolvers
 	respond "ok" 200
 }
 
 dns.puvvadi.net {
+	import tls_resolvers
 	respond "ok" 200
 }
 
 dash.dns.puvvadi.net {
+	import tls_resolvers
 	reverse_proxy dash:8080
 }
