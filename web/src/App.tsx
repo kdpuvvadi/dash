@@ -243,17 +243,36 @@ function BlockCard({
     const cts = h?.containers || [];
     const up = cts.filter((c) => /up/i.test(c.status)).length;
     return (
-      <GenericCard
-        title="Docker"
-        sub="Containers"
-        icon={block.icon || "docker"}
-        online={!!h?.online}
-        metricLabel="Running"
-        metricValue={`${up} / ${cts.length}`}
-        accent={accent}
-        url={h?.hostname}
-        spark={history[`${h?.name}:cpu`] || []}
-      />
+      <div className="card">
+        <span className={`card-online ${h?.online ? "on" : ""}`} />
+        <div className="host-head">
+          <div className="card-icon" style={{ boxShadow: `inset 0 0 0 1px ${accent}33` }}>
+            <img src={iconUrl(block.icon || "docker")} alt="" />
+          </div>
+          <div>
+            <div className="card-title">Docker</div>
+            <div className="card-sub">
+              {up} / {cts.length} running
+            </div>
+          </div>
+        </div>
+        <div className="container-list">
+          {cts.length === 0 && <span style={{ color: "var(--muted)" }}>No containers</span>}
+          {cts.map((c) => (
+            <div key={c.id} className="container-row">
+              <span className={`container-dot ${/up/i.test(c.status) ? "on" : ""}`} />
+              <div className="container-meta">
+                <strong>{c.name}</strong>
+                <span>{c.image}</span>
+              </div>
+              <div className="container-stats">
+                {(c.cpu_pct || 0).toFixed(0)}%
+                {c.mem_usage ? ` · ${c.mem_usage.split(" / ")[0]}` : ""}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     );
   }
   if (block.type === "metric") {

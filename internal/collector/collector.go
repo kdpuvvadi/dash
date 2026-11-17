@@ -252,24 +252,8 @@ func (c *Collector) collectLocal(name string) (*store.HostSnap, []store.UnknownA
 	if err != nil || hs == nil {
 		hs = &store.HostSnap{Online: true, Role: "docker", Hostname: name}
 	}
-	cts, derr := CollectDocker(run, name, "")
-	if derr != nil {
-		// try docker without sh
-		if out, err := exec.Command("docker", "ps", "-a", "--format", `{"ID":"{{.ID}}","Names":"{{.Names}}","Image":"{{.Image}}","Status":"{{.Status}}","Ports":"{{.Ports}}"}`).CombinedOutput(); err == nil {
-			run2 := func(cmd string) (string, error) {
-				if strings.HasPrefix(cmd, "docker ") {
-					parts := strings.Fields(cmd)
-					o, e := exec.Command(parts[0], parts[1:]...).CombinedOutput()
-					return string(o), e
-				}
-				return "", fmt.Errorf("unsupported")
-			}
-			_ = out
-			cts, _ = CollectDocker(run2, name, "")
-		}
-	} else {
-		hs.Containers = cts
-	}
+	cts, _ := CollectDocker(run, name, "")
+	hs.Containers = cts
 	if len(hs.Containers) > 0 {
 		hs.Online = true
 		if hs.Role == "linux" {
