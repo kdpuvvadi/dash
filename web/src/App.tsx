@@ -290,7 +290,8 @@ export default function App() {
   const summary = snap.summary;
   const online = summary?.services_online ?? 0;
   const total = summary?.services_total ?? 0;
-  const allOk = online >= total && total > 0;
+  const statusText = summary?.status || "All systems operational";
+  const allOk = /operational/i.test(statusText);
   const countLabel = String(services.length).padStart(2, "0");
   const hosts = hostList(snap, category);
   const hostsOnline = hosts.filter((h) => h.online).length;
@@ -361,7 +362,7 @@ export default function App() {
               <div className="k">System Status</div>
               <div className="v">
                 <span className={`dot ${allOk ? "ok" : ""}`} />
-                {summary?.status || (allOk ? "All systems operational" : "Attention needed")}
+                {statusText}
               </div>
             </div>
             <div className="summary-item">

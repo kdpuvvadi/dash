@@ -293,6 +293,8 @@ func (c *Collector) applyNetRates(name string, hs *store.HostSnap, now time.Time
 func buildSummary(snap store.Snapshot, started time.Time) store.Summary {
 	total := 0
 	online := 0
+	attention := 0
+	hostsOnline := 0
 	var diskUsed, diskTotal, memUsed, memTotal uint64
 	var uptime int64
 	var cpuSum, rxBps, txBps float64
@@ -301,6 +303,12 @@ func buildSummary(snap store.Snapshot, started time.Time) store.Summary {
 		total++
 		if h.Online {
 			online++
+			hostsOnline++
+			cpuSum += h.CPUPct
+			cpuN++
+		}
+		if hostNeedsAttention(h) {
+			attention++
 		}
 		diskUsed += h.DiskUsed
 		diskTotal += h.DiskTotal
@@ -308,10 +316,6 @@ func buildSummary(snap store.Snapshot, started time.Time) store.Summary {
 		memTotal += h.MemTotal
 		rxBps += h.NetRxBps
 		txBps += h.NetTxBps
-		if h.Online {
-			cpuSum += h.CPUPct
-			cpuN++
-		}
 		if h.UptimeSec > uptime {
 			uptime = h.UptimeSec
 		}
@@ -320,6 +324,9 @@ func buildSummary(snap store.Snapshot, started time.Time) store.Summary {
 			if containerIsOnline(c) {
 				online++
 			}
+			if containerNeedsAttention(c) {
+				attention++
+			}
 		}
 	}
 	for _, a := range snap.Apps {
@@ -327,12 +334,16 @@ func buildSummary(snap store.Snapshot, started time.Time) store.Summary {
 		if a.Online {
 			online++
 		}
+		if appNeedsAttention(a) {
+			attention++
+		}
 	}
+	// Stopped services are fine. Only errors (unhealthy, dead, host/app failures) need attention.
 	status := "All systems operational"
-	if online < total {
+	if attention > 0 {
 		status = "Some systems need attention"
 	}
-	if online == 0 && total > 0 {
+	if hostsOnline == 0 && len(snap.Hosts) > 0 {
 		status = "No systems reachable"
 	}
 	sum := store.Summary{

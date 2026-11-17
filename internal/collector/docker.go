@@ -308,6 +308,45 @@ func containerIsOnline(c store.Container) bool {
 	return strings.Contains(strings.ToLower(c.Status), "up")
 }
 
+// containerNeedsAttention is true for failure states only.
+// Intentionally stopped/created/paused containers do not need attention.
+func containerNeedsAttention(c store.Container) bool {
+	if strings.EqualFold(c.Health, "unhealthy") {
+		return true
+	}
+	switch strings.ToLower(c.State) {
+	case "dead", "restarting":
+		return true
+	case "stopped", "exited", "created", "paused", "removing", "running":
+		return false
+	}
+	s := strings.ToLower(c.Status)
+	if strings.Contains(s, "(unhealthy)") {
+		return true
+	}
+	if strings.HasPrefix(s, "restarting") || strings.HasPrefix(s, "dead") {
+		return true
+	}
+	return false
+}
+
+func hostNeedsAttention(h *store.HostSnap) bool {
+	if h == nil {
+		return false
+	}
+	if strings.TrimSpace(h.Error) != "" {
+		return true
+	}
+	return !h.Online
+}
+
+func appNeedsAttention(a *store.AppSnap) bool {
+	if a == nil {
+		return false
+	}
+	return strings.TrimSpace(a.Error) != ""
+}
+
 func parsePct(s string) float64 {
 	s = strings.TrimSuffix(strings.TrimSpace(s), "%")
 	v, _ := strconv.ParseFloat(s, 64)
