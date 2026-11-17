@@ -1,4 +1,4 @@
-.PHONY: ui build release run tidy validate
+.PHONY: ui build run tidy validate docker
 
 ui:
 	cd web && npm install && npm run build
@@ -12,8 +12,8 @@ tidy:
 build: ui tidy
 	go build -o bin/dash ./cmd/dash
 
-release: ui tidy
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o dist/dash ./cmd/dash
+docker:
+	docker build -t dash:local .
 
 run: build
 	DASH_CONFIG=./config ./bin/dash serve -config ./config

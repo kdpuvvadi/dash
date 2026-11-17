@@ -111,14 +111,14 @@ Example: `icon: jellyfin` or `icon: si:github`.
 
 ## Caddy and HTTPS
 
-Compose runs **Caddy** in front of Dash:
+Compose runs **caddybuilds/caddy-cloudflare** in front of Dash:
 
-- Edit `deploy/Caddyfile` with your hostname (default `dash.dns.puvvadi.net`)
-- Open ports 80 and 443
-- Caddy gets certificates when the name is reachable on the public internet
-- For LAN or Tailscale only, use `tls internal` in the Caddyfile (commented example is in the file)
+- `Caddyfile` next to `compose.yaml` (hostname default `dash.dns.puvvadi.net`)
+- Ports 80 and 443 only (Dash has no host port)
+- Certificates use **Cloudflare DNS** verification — set `CLOUDFLARE_API_TOKEN` in `.env`
+- Optional `CADDY_EMAIL` in `.env` for Let’s Encrypt contact
 
-Dash itself is not published on the host. Only Caddy is.
+The app image is pulled from GitHub Container Registry (`ghcr.io/.../dash`). The server folder should not hold source code or a local binary.
 
 ## Unknown apps
 

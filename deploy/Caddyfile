@@ -1,6 +1,9 @@
-# Homelab / Tailscale hostname — internal TLS (browser will warn once; trust or use your own certs).
-# For a public hostname with Let's Encrypt, remove the "tls internal" line.
+# Kept for reference. Server uses ~/dash/Caddyfile next to compose.yaml.
+{
+	email {$CADDY_EMAIL}
+	acme_dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+}
+
 dash.dns.puvvadi.net {
-	tls internal
 	reverse_proxy dash:8080
 }

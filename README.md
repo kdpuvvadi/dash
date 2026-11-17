@@ -4,23 +4,48 @@ Read-only homelab metrics dashboard.
 
 List machines in a YAML file. Dash connects over SSH (or local Docker), shows Proxmox guests and containers, and can pull stats from known apps using drop-in YAML definitions. The web UI builds itself from your layout config and stays view-only.
 
-## Quick start
+## Server layout (minimal)
 
-Docker Compose: **dash** (no host ports) + **Caddy** (80/443, TLS). No systemd.
+On the LXC only keep:
 
-On the LXC (as root, home is `/root`):
-
-```bash
-cd ~/dash
-docker compose up -d --build
+```text
+~/dash/
+  compose.yaml
+  Caddyfile
+  .env
+  config/
 ```
 
-- App folder: `~/dash/`
-- Config: `~/dash/config` → `/config` in the container
-- First start creates `app.yaml` if missing
-- UI: `https://dash.dns.puvvadi.net` (Caddy; dash is not published on 8080)
+No source tree, no binary, no local build. Images are pulled:
 
-Build the linux binary first on your PC (`make release` or `GOOS=linux GOARCH=amd64 go build -o dist/dash ./cmd/dash`), then copy `dist/dash` into `~/dash/dist/` before `docker compose build`. Default Caddyfile uses `tls internal` for LAN/Tailscale; drop that line for public Let's Encrypt.
+- `ghcr.io/<owner>/dash` — app (built by GitHub Actions)
+- `caddybuilds/caddy-cloudflare` — Caddy with Cloudflare DNS plugin for TLS
+
+## Quick start on the server
+
+```bash
+mkdir -p ~/dash/config
+cd ~/dash
+# copy compose.yaml, Caddyfile, .env.example→.env from the repo
+nano .env   # set CLOUDFLARE_API_TOKEN, GITHUB_OWNER, CADDY_EMAIL
+
+# if the GHCR package is private:
+echo "$GHCR_TOKEN" | docker login ghcr.io -u USERNAME --password-stdin
+
+docker compose pull
+docker compose up -d
+```
+
+- Config: `~/dash/config` → `/config` in the container (first start writes `app.yaml` if missing)
+- UI: `https://dash.dns.puvvadi.net`
+- TLS: Let’s Encrypt via **Cloudflare DNS** challenge (`CLOUDFLARE_API_TOKEN` needs Zone → DNS → Edit)
+
+## Build / publish (CI)
+
+Push to `main` (or run **Build and push** manually) runs `.github/workflows/publish.yml`:
+
+- Builds the multi-stage `Dockerfile`
+- Pushes to `ghcr.io/<github.repository>:latest` (and version tags on `v*`)
 
 ## Docs
 
@@ -29,7 +54,7 @@ Build the linux binary first on your PC (`make release` or `GOOS=linux GOARCH=am
 - [Contributing](CONTRIBUTING.md)
 - UI target: [docs/design/figma-homelab-overview.png](docs/design/figma-homelab-overview.png)
 
-## Commands
+## Commands (inside the image / local dev)
 
 ```bash
 dash serve -config /config
@@ -42,5 +67,6 @@ dash discover --host 10.20.20.1
 ## Stack
 
 - Go hub (SSH collector, SQLite history, WebSocket)
-- Vite React UI (embedded in the binary)
-- Caddy for TLS and reverse proxy
+- Vite React UI (embedded in the image)
+- Caddy + Cloudflare DNS for TLS
+- GitHub Container Registry for the app image
