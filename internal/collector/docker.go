@@ -344,6 +344,10 @@ func appNeedsAttention(a *store.AppSnap) bool {
 	if a == nil {
 		return false
 	}
+	// Missing API keys are config TODOs, not runtime failures.
+	if a.NeedsKey {
+		return false
+	}
 	return strings.TrimSpace(a.Error) != ""
 }
 
