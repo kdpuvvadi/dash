@@ -7,8 +7,13 @@ const ACCENTS = ["#fb923c", "#38bdf8", "#a78bfa", "#f472b6", "#2dd4bf", "#fbbf24
 
 type Hist = Record<string, { t: string; v: number }[]>;
 
+type ServiceKind = "host" | "container" | "app";
+type TypeFilter = "all" | ServiceKind;
+type HealthFilter = "all" | "online" | "offline";
+
 type ServiceCard = {
   key: string;
+  kind: ServiceKind;
   title: string;
   sub: string;
   icon: string;
@@ -84,6 +89,7 @@ function buildServices(snap: Snapshot, history: Hist, category: string): Service
     const accent = ACCENTS[i++ % ACCENTS.length];
     cards.push({
       key: `host:${h.name}`,
+      kind: "host",
       title: h.name,
       sub: roleLabel(h.role),
       icon: h.icon || (h.role === "proxmox" ? "proxmox" : h.role === "docker" ? "docker" : "linux"),
@@ -129,6 +135,7 @@ function containerCard(c: Container, host: HostSnap, accent: string, history: Hi
           : "stopped";
   return {
     key: `ct:${host.name}:${c.id}`,
+    kind: "container",
     title: c.app_name || c.name,
     sub: c.app_name && c.app_name !== c.name ? c.name : host.name,
     icon: c.icon || "docker",
@@ -153,6 +160,7 @@ function appCard(app: AppSnap, accent: string): ServiceCard {
   }
   return {
     key: `app:${app.id}`,
+    kind: "app",
     title: app.name,
     sub: app.type,
     icon: app.icon || app.type,
@@ -172,6 +180,8 @@ export default function App() {
   const [history, setHistory] = useState<Hist>({});
   const [connected, setConnected] = useState(false);
   const [category, setCategory] = useState<string>("");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [healthFilter, setHealthFilter] = useState<HealthFilter>("all");
   const [clock, setClock] = useState(timeNow());
 
   useEffect(() => {
@@ -201,10 +211,19 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
 
-  const services = useMemo(() => {
+  const allServices = useMemo(() => {
     if (!snap) return [];
     return buildServices(snap, history, category);
   }, [snap, history, category]);
+
+  const services = useMemo(() => {
+    return allServices.filter((s) => {
+      if (typeFilter !== "all" && s.kind !== typeFilter) return false;
+      if (healthFilter === "online" && !s.online) return false;
+      if (healthFilter === "offline" && s.online) return false;
+      return true;
+    });
+  }, [allServices, typeFilter, healthFilter]);
 
   if (!layout || !snap) {
     return (
@@ -291,14 +310,45 @@ export default function App() {
           <h2>
             Your services <span className="count">{countLabel}</span>
           </h2>
-          <div className="range">Live · every {layout.poll_seconds || 5}s</div>
+          <div className="section-tools">
+            <div className="filter-menu" role="group" aria-label="Filter services">
+              <label className="filter-field">
+                <span>Type</span>
+                <select
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
+                >
+                  <option value="all">All types</option>
+                  <option value="host">Hosts</option>
+                  <option value="container">Containers</option>
+                  <option value="app">Apps</option>
+                </select>
+              </label>
+              <label className="filter-field">
+                <span>Health</span>
+                <select
+                  value={healthFilter}
+                  onChange={(e) => setHealthFilter(e.target.value as HealthFilter)}
+                >
+                  <option value="all">All status</option>
+                  <option value="online">Online</option>
+                  <option value="offline">Offline</option>
+                </select>
+              </label>
+            </div>
+            <div className="range">Live · every {layout.poll_seconds || 5}s</div>
+          </div>
         </div>
 
-        <div className="service-grid">
-          {services.map((s) => (
-            <ServiceTile key={s.key} card={s} />
-          ))}
-        </div>
+        {services.length === 0 ? (
+          <p className="empty-filter">No services match these filters.</p>
+        ) : (
+          <div className="service-grid">
+            {services.map((s) => (
+              <ServiceTile key={s.key} card={s} />
+            ))}
+          </div>
+        )}
       </section>
 
       <footer className="footer">
