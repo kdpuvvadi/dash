@@ -586,7 +586,7 @@ function ServiceTile({ card }: { card: ServiceCard }) {
         {card.statusLabel}
       </span>
       <div className="card-body">
-        <div className="card-left">
+        <div className="card-top">
           <div
             className="card-icon"
             style={{
@@ -596,13 +596,13 @@ function ServiceTile({ card }: { card: ServiceCard }) {
           >
             <img src={iconUrl(card.icon)} alt="" />
           </div>
-          <div className="card-url">{card.url}</div>
-        </div>
-        <div className="card-right">
-          <div>
+          <div className="card-id">
             <div className="card-title">{card.title}</div>
             <div className="card-sub">{card.sub}</div>
+            <div className="card-url">{card.url}</div>
           </div>
+        </div>
+        <div className="card-bottom">
           <div className="card-metric">
             <div className="metric-label">{card.metricLabel}</div>
             <div className="metric-value" style={{ color: card.accent }}>
