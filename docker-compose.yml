@@ -1,0 +1,24 @@
+services:
+  dash:
+    build: .
+    image: dash:latest
+    expose:
+      - "8080"
+    volumes:
+      - ./config:/config
+      # Uncomment to watch local Docker on the host:
+      # - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy-data:/data
+      - ./caddy-config:/config
+    depends_on:
+      - dash
+    restart: unless-stopped

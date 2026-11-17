@@ -1,0 +1,10 @@
+# Public hostname — Caddy will get a certificate when 80/443 are reachable.
+dash.dns.puvvadi.net {
+	reverse_proxy dash:8080
+}
+
+# For LAN / Tailscale only (no public ACME), use this instead:
+# dash.dns.puvvadi.net {
+# 	tls internal
+# 	reverse_proxy dash:8080
+# }
