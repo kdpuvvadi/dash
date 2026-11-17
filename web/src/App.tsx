@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { connectWS, fetchLayout, formatBytes, formatRate, iconUrl, timeNow } from "./api";
 import Sparkline from "./Sparkline";
-import type { Block, HostSnap, LayoutPayload, Snapshot } from "./types";
+import type { Block, HostSnap, LayoutPayload, Section, Snapshot } from "./types";
 
 const ACCENTS = ["#fb923c", "#38bdf8", "#a78bfa", "#f472b6", "#2dd4bf", "#fbbf24", "#3dd68c"];
 
@@ -69,7 +69,8 @@ export default function App() {
 
   const sections = useMemo(() => {
     if (!layout) return [];
-    const all = layout.layout?.sections || [];
+    const raw = layout.layout as { sections?: Section[]; Sections?: Section[] } | undefined;
+    const all = raw?.sections || raw?.Sections || [];
     if (!category) return all;
     const filtered = all.filter((s) => !s.category || s.category === category);
     return filtered.length ? filtered : all;

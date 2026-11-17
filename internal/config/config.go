@@ -34,38 +34,38 @@ type Alerts struct {
 }
 
 type Category struct {
-	ID   string `yaml:"id"`
-	Name string `yaml:"name"`
+	ID   string `yaml:"id" json:"id"`
+	Name string `yaml:"name" json:"name"`
 }
 
 type Group struct {
-	ID       string `yaml:"id"`
-	Name     string `yaml:"name"`
-	Category string `yaml:"category"`
+	ID       string `yaml:"id" json:"id"`
+	Name     string `yaml:"name" json:"name"`
+	Category string `yaml:"category" json:"category,omitempty"`
 }
 
 type Layout struct {
-	Sections []Section `yaml:"sections"`
+	Sections []Section `yaml:"sections" json:"sections"`
 }
 
 type Section struct {
-	ID       string `yaml:"id"`
-	Title    string `yaml:"title"`
-	Category string `yaml:"category"`
-	Rows     []Row  `yaml:"rows"`
+	ID       string `yaml:"id" json:"id"`
+	Title    string `yaml:"title" json:"title,omitempty"`
+	Category string `yaml:"category" json:"category,omitempty"`
+	Rows     []Row  `yaml:"rows" json:"rows"`
 }
 
 type Row struct {
-	Columns int     `yaml:"columns"`
-	Group   string  `yaml:"group"`
-	Blocks  []Block `yaml:"blocks"`
+	Columns int     `yaml:"columns" json:"columns"`
+	Group   string  `yaml:"group" json:"group,omitempty"`
+	Blocks  []Block `yaml:"blocks" json:"blocks"`
 }
 
 type Block struct {
-	Type  string `yaml:"type"`
-	Ref   string `yaml:"ref"`
-	Field string `yaml:"field"`
-	Icon  string `yaml:"icon"`
+	Type  string `yaml:"type" json:"type"`
+	Ref   string `yaml:"ref" json:"ref,omitempty"`
+	Field string `yaml:"field" json:"field,omitempty"`
+	Icon  string `yaml:"icon" json:"icon,omitempty"`
 }
 
 type Host struct {

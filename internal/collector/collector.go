@@ -232,7 +232,7 @@ func (c *Collector) collectHost(h config.Host, defs map[string]*apps.Def) (*stor
 			hs.Containers = append(hs.Containers, nested...)
 		}
 	}
-	cts, err := CollectDocker(run, h.Name, "")
+	cts, err := CollectDocker(run, h.Name, "") // SSH remote — never the local docker.sock
 	if err == nil {
 		hs.Containers = append(hs.Containers, cts...)
 	}
@@ -252,7 +252,7 @@ func (c *Collector) collectLocal(name string) (*store.HostSnap, []store.UnknownA
 	if err != nil || hs == nil {
 		hs = &store.HostSnap{Online: true, Role: "docker", Hostname: name}
 	}
-	cts, _ := CollectDocker(run, name, "")
+	cts, _ := CollectDockerLocal(run, name, "")
 	hs.Containers = cts
 	if len(hs.Containers) > 0 {
 		hs.Online = true

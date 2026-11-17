@@ -19,11 +19,19 @@ import (
 const defaultDockerSock = "/var/run/docker.sock"
 
 func CollectDocker(run func(string) (string, error), hostRef, guestID string) ([]store.Container, error) {
-	if sock := dockerSockPath(); sock != "" {
-		if cts, err := CollectDockerSock(sock, hostRef, guestID); err == nil && len(cts) > 0 {
-			return cts, nil
-		} else if err == nil {
-			return cts, nil
+	return collectDocker(run, hostRef, guestID, false)
+}
+
+func CollectDockerLocal(run func(string) (string, error), hostRef, guestID string) ([]store.Container, error) {
+	return collectDocker(run, hostRef, guestID, true)
+}
+
+func collectDocker(run func(string) (string, error), hostRef, guestID string, useLocalSock bool) ([]store.Container, error) {
+	if useLocalSock {
+		if sock := dockerSockPath(); sock != "" {
+			if cts, err := CollectDockerSock(sock, hostRef, guestID); err == nil {
+				return cts, nil
+			}
 		}
 	}
 	if _, err := run("command -v docker"); err != nil {
