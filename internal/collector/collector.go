@@ -315,6 +315,12 @@ func buildSummary(snap store.Snapshot, started time.Time) store.Summary {
 		if h.UptimeSec > uptime {
 			uptime = h.UptimeSec
 		}
+		for _, c := range h.Containers {
+			total++
+			if strings.Contains(strings.ToLower(c.Status), "up") {
+				online++
+			}
+		}
 	}
 	for _, a := range snap.Apps {
 		total++

@@ -1,11 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
 import { connectWS, fetchLayout, formatBytes, formatRate, iconUrl, timeNow } from "./api";
 import Sparkline from "./Sparkline";
-import type { Block, HostSnap, LayoutPayload, Section, Snapshot } from "./types";
+import type { AppSnap, Container, HostSnap, LayoutPayload, Snapshot } from "./types";
 
 const ACCENTS = ["#fb923c", "#38bdf8", "#a78bfa", "#f472b6", "#2dd4bf", "#fbbf24", "#3dd68c"];
 
 type Hist = Record<string, { t: string; v: number }[]>;
+
+type ServiceCard = {
+  key: string;
+  title: string;
+  sub: string;
+  icon: string;
+  url: string;
+  online: boolean;
+  metricLabel: string;
+  metricValue: string;
+  spark: { t: string; v: number }[];
+  accent: string;
+  tint: string;
+};
 
 function pushLiveHistory(prev: Hist, snap: Snapshot): Hist {
   const next: Hist = { ...prev };
@@ -30,6 +44,126 @@ function pushLiveHistory(prev: Hist, snap: Snapshot): Hist {
     }
   }
   return next;
+}
+
+function roleLabel(role?: string) {
+  switch ((role || "").toLowerCase()) {
+    case "proxmox":
+      return "Virtualization";
+    case "docker":
+      return "Containers";
+    default:
+      return "Server";
+  }
+}
+
+function hostUrl(h: HostSnap) {
+  if (h.hostname && h.hostname.includes(".")) return h.hostname;
+  if (h.hostname) return `${h.hostname}.home`;
+  return h.name.includes(".") ? h.name : `${h.name}.home`;
+}
+
+function hexAlpha(hex: string, a: number) {
+  const h = hex.replace("#", "");
+  const n = parseInt(h.length === 3 ? h.split("").map((c) => c + c).join("") : h, 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function buildServices(snap: Snapshot, history: Hist, category: string): ServiceCard[] {
+  const hosts = Object.values(snap.hosts || {});
+  const filtered = category
+    ? hosts.filter((h) => !h.category || h.category === category)
+    : hosts;
+  const cards: ServiceCard[] = [];
+  let i = 0;
+
+  for (const h of filtered) {
+    const accent = ACCENTS[i++ % ACCENTS.length];
+    cards.push({
+      key: `host:${h.name}`,
+      title: h.name,
+      sub: roleLabel(h.role),
+      icon: h.icon || (h.role === "proxmox" ? "proxmox" : h.role === "docker" ? "docker" : "linux"),
+      url: hostUrl(h),
+      online: !!h.online,
+      metricLabel: "CPU",
+      metricValue: `${(h.cpu_pct || 0).toFixed(0)}%`,
+      spark: history[`${h.name}:cpu`] || [],
+      accent,
+      tint: hexAlpha(accent, 0.08),
+    });
+
+    for (const c of h.containers || []) {
+      const accentC = ACCENTS[i++ % ACCENTS.length];
+      cards.push(containerCard(c, h, accentC, history));
+    }
+  }
+
+  for (const app of Object.values(snap.apps || {})) {
+    if (category && app.category && app.category !== category) continue;
+    // skip apps that duplicate a container already shown
+    const dup = cards.some(
+      (c) => c.title.toLowerCase() === (app.name || "").toLowerCase() || c.key.includes(app.id)
+    );
+    if (dup) continue;
+    const accent = ACCENTS[i++ % ACCENTS.length];
+    cards.push(appCard(app, accent));
+  }
+
+  return cards;
+}
+
+function containerCard(c: Container, host: HostSnap, accent: string, history: Hist): ServiceCard {
+  const up = /up/i.test(c.status);
+  const mem = c.mem_usage ? c.mem_usage.split(" / ")[0] : "";
+  const metricValue =
+    c.cpu_pct && c.cpu_pct > 0
+      ? `${c.cpu_pct.toFixed(0)}%`
+      : mem
+        ? mem
+        : up
+          ? "running"
+          : "stopped";
+  return {
+    key: `ct:${host.name}:${c.id}`,
+    title: c.app_name || c.name,
+    sub: c.app_name && c.app_name !== c.name ? c.name : host.name,
+    icon: c.icon || "docker",
+    url: hostUrl(host),
+    online: up,
+    metricLabel: c.cpu_pct && c.cpu_pct > 0 ? "CPU" : mem ? "Memory" : "Status",
+    metricValue,
+    spark: history[`${host.name}:cpu`] || [],
+    accent,
+    tint: hexAlpha(accent, 0.08),
+  };
+}
+
+function appCard(app: AppSnap, accent: string): ServiceCard {
+  const fieldKey = Object.keys(app.fields || {})[0];
+  const fieldVal = fieldKey ? app.fields[fieldKey] : app.online ? "ok" : "—";
+  let url = app.url || "";
+  try {
+    if (url) url = new URL(url).host;
+  } catch {
+    /* keep raw */
+  }
+  return {
+    key: `app:${app.id}`,
+    title: app.name,
+    sub: app.type,
+    icon: app.icon || app.type,
+    url: url || `${app.name}.home`,
+    online: !!app.online,
+    metricLabel: fieldKey || "Status",
+    metricValue: String(fieldVal),
+    spark: [],
+    accent,
+    tint: hexAlpha(accent, 0.08),
+  };
 }
 
 export default function App() {
@@ -67,25 +201,24 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
 
-  const sections = useMemo(() => {
-    if (!layout) return [];
-    const raw = layout.layout as { sections?: Section[]; Sections?: Section[] } | undefined;
-    const all = raw?.sections || raw?.Sections || [];
-    if (!category) return all;
-    const filtered = all.filter((s) => !s.category || s.category === category);
-    return filtered.length ? filtered : all;
-  }, [layout, category]);
+  const services = useMemo(() => {
+    if (!snap) return [];
+    return buildServices(snap, history, category);
+  }, [snap, history, category]);
 
   if (!layout || !snap) {
     return (
       <div className="app">
-        <p style={{ color: "var(--muted)" }}>Loading dashboard…</p>
+        <p className="loading">Loading dashboard…</p>
       </div>
     );
   }
 
   const summary = snap.summary;
-  const groups = Object.fromEntries((layout.groups || []).map((g) => [g.id, g.name]));
+  const online = summary?.services_online ?? 0;
+  const total = summary?.services_total ?? 0;
+  const allOk = online >= total && total > 0;
+  const countLabel = String(services.length).padStart(2, "0");
 
   return (
     <div className="app">
@@ -117,7 +250,10 @@ export default function App() {
       </header>
 
       <section className="hero">
-        <h1>{layout.brand?.tagline || "A little lab. A lot of possibility."}</h1>
+        <div className="hero-copy">
+          <h1>{layout.brand?.tagline || "A little lab. A lot of possibility."}</h1>
+          <p className="hero-sub">All your apps, right where they belong.</p>
+        </div>
         <div className="local-time">
           <div className="label">LOCAL TIME</div>
           <div className="value">{clock}</div>
@@ -126,93 +262,51 @@ export default function App() {
 
       <section className="summary">
         <div className="summary-item">
-          <div className="k">CPU</div>
-          <div className="v">{(summary?.cpu_pct ?? 0).toFixed(0)}%</div>
-        </div>
-        <div className="summary-item">
-          <div className="k">Memory</div>
+          <div className="k">System Status</div>
           <div className="v">
-            {summary?.mem_used || "—"} / {summary?.mem_total || "—"}
-            <span className="summary-pct">{(summary?.mem_pct ?? 0).toFixed(0)}%</span>
+            <span className={`dot ${allOk ? "ok" : ""}`} />
+            {summary?.status || (allOk ? "All systems operational" : "Attention needed")}
           </div>
         </div>
         <div className="summary-item">
-          <div className="k">Network</div>
+          <div className="k">Services</div>
           <div className="v">
-            ↓ {summary?.net_rx_human || formatRate(summary?.net_rx_bps)}
-            <span className="summary-sep">·</span>
-            ↑ {summary?.net_tx_human || formatRate(summary?.net_tx_bps)}
+            {online} / {total} online
           </div>
+        </div>
+        <div className="summary-item">
+          <div className="k">Uptime</div>
+          <div className="v">{summary?.uptime_human || "—"}</div>
         </div>
         <div className="summary-item">
           <div className="k">Storage</div>
           <div className="v">
             {summary?.storage_used || "—"} / {summary?.storage_total || "—"}
-            <span className="summary-pct">{(summary?.storage_pct ?? 0).toFixed(0)}%</span>
           </div>
         </div>
       </section>
 
-      {sections.map((sec) => (
-        <section key={sec.id}>
-          <div className="section-head">
-            <h2>{sec.title || "Your services"}</h2>
-            <div className="range">Live · every {layout.poll_seconds || 5}s</div>
-          </div>
-          {sec.rows?.map((row, idx) => {
-            const blocks = (row.blocks || []).filter((b) => {
-              if (b.type === "unknown_apps") {
-                return (snap.unknown_apps || []).length > 0;
-              }
-              return true;
-            });
-            if (!blocks.length) return null;
-            const isPanel = (b: Block) => b.type === "containers" || b.type === "unknown_apps";
-            const inline = blocks.filter((b) => !isPanel(b));
-            const panels = blocks.filter(isPanel);
-            const cols = Math.max(1, Math.min(row.columns || inline.length || 1, inline.length || 1));
-            return (
-              <div key={idx} className="row-stack">
-                {row.group && <div className="group-label">{groups[row.group] || row.group}</div>}
-                {inline.length > 0 && (
-                  <div
-                    className="row-grid"
-                    style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
-                  >
-                    {inline.map((b, i) => (
-                      <BlockCard
-                        key={i}
-                        block={b}
-                        snap={snap}
-                        history={history}
-                        accent={ACCENTS[i % ACCENTS.length]}
-                        requestUrl={layout.app_request_url}
-                        repoUrl={layout.repo_url}
-                      />
-                    ))}
-                  </div>
-                )}
-                {panels.map((b, i) => (
-                  <BlockCard
-                    key={`panel-${i}`}
-                    block={b}
-                    snap={snap}
-                    history={history}
-                    accent={ACCENTS[(inline.length + i) % ACCENTS.length]}
-                    requestUrl={layout.app_request_url}
-                    repoUrl={layout.repo_url}
-                  />
-                ))}
-              </div>
-            );
-          })}
-        </section>
-      ))}
+      <section className="services">
+        <div className="section-head">
+          <h2>
+            Your services <span className="count">{countLabel}</span>
+          </h2>
+          <div className="range">Live · every {layout.poll_seconds || 5}s</div>
+        </div>
+
+        <div className="service-grid">
+          {services.map((s) => (
+            <ServiceTile key={s.key} card={s} />
+          ))}
+        </div>
+      </section>
 
       <footer className="footer">
         <span>
-          {summary?.status || "—"} · {summary?.services_online ?? 0}/{summary?.services_total ?? 0} online · up{" "}
-          {summary?.uptime_human || "—"}
+          {formatBytes(
+            Object.values(snap.hosts || {}).reduce((a, h) => a + (h.mem_used || 0), 0)
+          )}{" "}
+          RAM · ↓ {formatRate(summary?.net_rx_bps)} · ↑ {formatRate(summary?.net_tx_bps)}
         </span>
         <span>
           Live via socket • Updated{" "}
@@ -223,313 +317,51 @@ export default function App() {
   );
 }
 
-function BlockCard({
-  block,
-  snap,
-  history,
-  accent,
-  requestUrl,
-  repoUrl,
-}: {
-  block: Block;
-  snap: Snapshot;
-  history: Hist;
-  accent: string;
-  requestUrl: string;
-  repoUrl: string;
-}) {
-  if (block.type === "host") {
-    const h = snap.hosts?.[block.ref || ""];
-    return <HostCard host={h} accent={accent} history={history} icon={block.icon} />;
-  }
-  if (block.type === "app") {
-    const app =
-      Object.values(snap.apps || {}).find((a) => a.type === block.ref) ||
-      snap.apps?.[block.ref || ""];
-    return <AppCard app={app} accent={accent} icon={block.icon} />;
-  }
-  if (block.type === "guests") {
-    const h = snap.hosts?.[block.ref || ""];
-    const count = h?.guests?.length || 0;
-    const running = h?.guests?.filter((g) => g.status === "running").length || 0;
-    return (
-      <GenericCard
-        title="Guests"
-        sub={h?.name || block.ref || ""}
-        icon={block.icon || "proxmox"}
-        online={!!h?.online}
-        metricLabel="VMs / LXCs"
-        metricValue={`${running} / ${count}`}
-        accent={accent}
-        url={h?.hostname}
-      />
-    );
-  }
-  if (block.type === "containers") {
-    const h = snap.hosts?.[block.ref || ""];
-    const cts = h?.containers || [];
-    const up = cts.filter((c) => /up/i.test(c.status)).length;
-    return (
-      <div className="apps-panel">
-        <div className="apps-panel-head">
-          <div className="card-title">Containers</div>
-          <div className="card-sub">
-            {up} / {cts.length} running
-          </div>
-        </div>
-        {cts.length === 0 ? (
-          <div className="card-sub">No containers</div>
-        ) : (
-          <div className="apps-grid">
-            {cts.map((c, i) => (
-              <div key={c.id} className="app-tile">
-                <span className={`card-online ${/up/i.test(c.status) ? "on" : ""}`} />
-                <div className="card-icon" style={{ boxShadow: `inset 0 0 0 1px ${ACCENTS[i % ACCENTS.length]}33` }}>
-                  <img src={iconUrl(c.icon || "docker")} alt="" />
-                </div>
-                <div className="card-title">{c.app_name || c.name}</div>
-                <div className="card-sub">{c.name}</div>
-                <div className="app-tile-stats">
-                  {(c.cpu_pct || 0).toFixed(0)}%
-                  {c.mem_usage ? ` · ${c.mem_usage.split(" / ")[0]}` : ""}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  }
-  if (block.type === "metric") {
-    const h = snap.hosts?.[block.ref || ""];
-    const field = block.field || "cpu";
-    const value =
-      field === "mem"
-        ? `${(h?.mem_pct || 0).toFixed(0)}%`
-        : field === "disk"
-          ? `${(h?.disk_pct || 0).toFixed(0)}%`
-          : field === "net" || field === "net_rx"
-            ? formatRate(h?.net_rx_bps)
-            : `${(h?.cpu_pct || 0).toFixed(0)}%`;
-    const histKey =
-      field === "mem" || field === "disk" || field === "net_rx" || field === "net_tx"
-        ? `${h?.name}:${field}`
-        : field === "net"
-          ? `${h?.name}:net_rx`
-          : `${h?.name}:cpu`;
-    return (
-      <GenericCard
-        title={h?.name || block.ref || ""}
-        sub={field.toUpperCase()}
-        icon={block.icon || h?.icon || "linux"}
-        online={!!h?.online}
-        metricLabel={field}
-        metricValue={value}
-        accent={accent}
-        spark={history[histKey] || []}
-      />
-    );
-  }
-  if (block.type === "unknown_apps") {
-    const list = snap.unknown_apps || [];
-    if (!list.length) return null;
-    return (
-      <div className="apps-panel">
-        <div className="apps-panel-head">
-          <div className="card-title">Unknown apps</div>
-          <div className="card-sub">No catalog / icon match yet</div>
-        </div>
-        <div className="apps-grid">
-          {list.slice(0, 12).map((u, i) => (
-            <div key={i} className="app-tile">
-              <div className="card-icon" style={{ boxShadow: `inset 0 0 0 1px ${ACCENTS[i % ACCENTS.length]}33` }}>
-                <img src={iconUrl(u.icon || "docker")} alt="" />
-              </div>
-              <div className="card-title">{u.app_name || u.name}</div>
-              <div className="card-sub">{u.image}</div>
-            </div>
-          ))}
-        </div>
-        <div className="links">
-          <a href={requestUrl} target="_blank" rel="noreferrer">
-            Request this app
-          </a>
-          <a href={`${repoUrl}/blob/main/docs/add-an-app.md`} target="_blank" rel="noreferrer">
-            How to add locally
-          </a>
-          <a href={`${repoUrl}/blob/main/CONTRIBUTING.md`} target="_blank" rel="noreferrer">
-            Open a PR
-          </a>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="card">
-      <div className="card-title">{block.type}</div>
-      <div className="card-sub">Unknown block type</div>
-    </div>
-  );
-}
-
-function HostCard({
-  host,
-  accent,
-  history,
-  icon,
-}: {
-  host?: HostSnap;
-  accent: string;
-  history: Hist;
-  icon?: string;
-}) {
-  if (!host) {
-    return (
-      <div className="card">
-        <div className="card-title">Missing host</div>
-        <div className="badge">Not in snapshot</div>
-      </div>
-    );
-  }
-  return (
-    <div className="card host-card">
-      <span className={`card-online ${host.online ? "on" : ""}`} />
-      <div className="host-head">
-        <div className="card-icon" style={{ boxShadow: `inset 0 0 0 1px ${accent}33` }}>
-          <img src={iconUrl(icon || host.icon || "linux")} alt="" />
-        </div>
-        <div className="host-id">
-          <div className="card-title">{host.name}</div>
-          <div className="card-sub">{host.hostname || host.os || host.role}</div>
-          {host.error && <div className="badge">{host.error}</div>}
-        </div>
-      </div>
-      <div className="host-metrics">
-        <div className="host-metric">
-          <span className="metric-label">CPU</span>
-          <span className="metric-value" style={{ color: accent }}>
-            {(host.cpu_pct || 0).toFixed(0)}%
-          </span>
-          <Sparkline points={history[`${host.name}:cpu`] || []} color={accent} />
-        </div>
-        <div className="host-metric">
-          <span className="metric-label">Mem</span>
-          <span className="metric-value" style={{ color: accent }}>
-            {(host.mem_pct || 0).toFixed(0)}%
-          </span>
-          <span className="metric-sub">
-            {formatBytes(host.mem_used)} / {formatBytes(host.mem_total)}
-          </span>
-        </div>
-        <div className="host-metric">
-          <span className="metric-label">Disk</span>
-          <span className="metric-value" style={{ color: accent }}>
-            {(host.disk_pct || 0).toFixed(0)}%
-          </span>
-          <span className="metric-sub">
-            {formatBytes(host.disk_used)} / {formatBytes(host.disk_total)}
-          </span>
-        </div>
-        <div className="host-metric">
-          <span className="metric-label">Net</span>
-          <span className="metric-value" style={{ color: accent }}>
-            ↓ {formatRate(host.net_rx_bps)} · ↑ {formatRate(host.net_tx_bps)}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AppCard({
-  app,
-  accent,
-  icon,
-}: {
-  app?: import("./types").AppSnap;
-  accent: string;
-  icon?: string;
-}) {
-  if (!app) {
-    return (
-      <div className="card">
-        <div className="card-title">App</div>
-        <div className="badge">needs config in app.yaml</div>
-      </div>
-    );
-  }
-  const fieldKey = Object.keys(app.fields || {})[0];
-  const fieldVal = fieldKey ? app.fields[fieldKey] : app.online ? "ok" : "—";
-  return (
-    <GenericCard
-      title={app.name}
-      sub={app.type}
-      icon={icon || app.icon || app.type}
-      online={app.online}
-      metricLabel={fieldKey || "status"}
-      metricValue={String(fieldVal)}
-      accent={accent}
-      url={app.url}
-      needsKey={app.needs_key}
-      footnote={app.error}
-    />
-  );
-}
-
-function GenericCard(props: {
-  title: string;
-  sub: string;
-  icon: string;
-  online: boolean;
-  metricLabel: string;
-  metricValue: string;
-  accent: string;
-  url?: string;
-  spark?: { t: string; v: number }[];
-  footnote?: string;
-  needsKey?: boolean;
-}) {
-  const href = props.url && /^https?:/i.test(props.url) ? props.url : undefined;
+function ServiceTile({ card }: { card: ServiceCard }) {
   const inner = (
     <>
-      <span className={`card-online ${props.online ? "on" : ""}`} />
+      <span className={`card-online ${card.online ? "on" : ""}`} />
       <div className="card-body">
         <div className="card-left">
-          <div className="card-icon" style={{ boxShadow: `inset 0 0 0 1px ${props.accent}33` }}>
-            <img src={iconUrl(props.icon)} alt="" />
+          <div
+            className="card-icon"
+            style={{
+              background: hexAlpha(card.accent, 0.14),
+              boxShadow: `inset 0 0 0 1px ${hexAlpha(card.accent, 0.28)}`,
+            }}
+          >
+            <img src={iconUrl(card.icon)} alt="" />
           </div>
-          <div>
-            <div className="card-title">{props.title}</div>
-            <div className="card-sub">{props.sub}</div>
-          </div>
-          <div className="card-url">{props.url || ""}</div>
-          {props.needsKey && (
-            <div className="badge">needs an API key — add it in secrets.yaml (UI is read-only)</div>
-          )}
-          {props.footnote && !props.needsKey && (
-            <div className="card-sub" style={{ marginTop: 4 }}>
-              {props.footnote}
-            </div>
-          )}
+          <div className="card-url">{card.url}</div>
         </div>
         <div className="card-right">
           <div>
-            <div className="metric-label">{props.metricLabel}</div>
-            <div className="metric-value" style={{ color: props.accent }}>
-              {props.metricValue}
+            <div className="card-title">{card.title}</div>
+            <div className="card-sub">{card.sub}</div>
+          </div>
+          <div className="card-metric">
+            <div className="metric-label">{card.metricLabel}</div>
+            <div className="metric-value" style={{ color: card.accent }}>
+              {card.metricValue}
             </div>
           </div>
-          <Sparkline points={props.spark || []} color={props.accent} />
+          <Sparkline points={card.spark} color={card.accent} />
         </div>
       </div>
     </>
   );
+
+  const href = card.url && /^https?:/i.test(card.url) ? card.url : undefined;
   if (href) {
     return (
-      <a className="card" href={href} target="_blank" rel="noreferrer">
+      <a className="card" href={href} target="_blank" rel="noreferrer" style={{ background: card.tint }}>
         {inner}
       </a>
     );
   }
-  return <div className="card">{inner}</div>;
+  return (
+    <div className="card" style={{ background: card.tint }}>
+      {inner}
+    </div>
+  );
 }
