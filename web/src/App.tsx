@@ -159,27 +159,36 @@ export default function App() {
             <h2>{sec.title || "Your services"}</h2>
             <div className="range">Live · every {layout.poll_seconds || 5}s</div>
           </div>
-          {sec.rows?.map((row, idx) => (
-            <div key={idx}>
-              {row.group && <div className="group-label">{groups[row.group] || row.group}</div>}
-              <div
-                className="row-grid"
-                style={{ gridTemplateColumns: `repeat(${row.columns || 1}, minmax(0, 1fr))` }}
-              >
-                {row.blocks?.map((b, i) => (
-                  <BlockCard
-                    key={i}
-                    block={b}
-                    snap={snap}
-                    history={history}
-                    accent={ACCENTS[i % ACCENTS.length]}
-                    requestUrl={layout.app_request_url}
-                    repoUrl={layout.repo_url}
-                  />
-                ))}
+          {sec.rows?.map((row, idx) => {
+            const blocks = (row.blocks || []).filter((b) => {
+              if (b.type === "unknown_apps") {
+                return (snap.unknown_apps || []).length > 0;
+              }
+              return true;
+            });
+            if (!blocks.length) return null;
+            return (
+              <div key={idx}>
+                {row.group && <div className="group-label">{groups[row.group] || row.group}</div>}
+                <div
+                  className="row-grid"
+                  style={{ gridTemplateColumns: `repeat(${Math.min(row.columns || blocks.length, blocks.length) || 1}, minmax(0, 1fr))` }}
+                >
+                  {blocks.map((b, i) => (
+                    <BlockCard
+                      key={i}
+                      block={b}
+                      snap={snap}
+                      history={history}
+                      accent={ACCENTS[i % ACCENTS.length]}
+                      requestUrl={layout.app_request_url}
+                      repoUrl={layout.repo_url}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </section>
       ))}
 
@@ -244,41 +253,33 @@ function BlockCard({
     const cts = h?.containers || [];
     const up = cts.filter((c) => /up/i.test(c.status)).length;
     return (
-      <div className="card">
-        <span className={`card-online ${h?.online ? "on" : ""}`} />
-        <div className="host-head">
-          <div className="card-icon" style={{ boxShadow: `inset 0 0 0 1px ${accent}33` }}>
-            <img src={iconUrl(block.icon || "docker")} alt="" />
-          </div>
-          <div>
-            <div className="card-title">Docker</div>
-            <div className="card-sub">
-              {up} / {cts.length} running
-            </div>
+      <div className="apps-panel">
+        <div className="apps-panel-head">
+          <div className="card-title">Containers</div>
+          <div className="card-sub">
+            {up} / {cts.length} running
           </div>
         </div>
-        <div className="container-list">
-          {cts.length === 0 && <span style={{ color: "var(--muted)" }}>No containers</span>}
-          {cts.map((c) => (
-            <div key={c.id} className="container-row">
-              <div className="container-icon">
-                <img src={iconUrl(c.icon || "docker")} alt="" />
-                <span className={`container-dot ${/up/i.test(c.status) ? "on" : ""}`} />
+        {cts.length === 0 ? (
+          <div className="card-sub">No containers</div>
+        ) : (
+          <div className="apps-grid">
+            {cts.map((c, i) => (
+              <div key={c.id} className="app-tile">
+                <span className={`card-online ${/up/i.test(c.status) ? "on" : ""}`} />
+                <div className="card-icon" style={{ boxShadow: `inset 0 0 0 1px ${ACCENTS[i % ACCENTS.length]}33` }}>
+                  <img src={iconUrl(c.icon || "docker")} alt="" />
+                </div>
+                <div className="card-title">{c.app_name || c.name}</div>
+                <div className="card-sub">{c.name}</div>
+                <div className="app-tile-stats">
+                  {(c.cpu_pct || 0).toFixed(0)}%
+                  {c.mem_usage ? ` · ${c.mem_usage.split(" / ")[0]}` : ""}
+                </div>
               </div>
-              <div className="container-meta">
-                <strong>{c.app_name || c.name}</strong>
-                <span>
-                  {c.name}
-                  {c.image ? ` · ${c.image}` : ""}
-                </span>
-              </div>
-              <div className="container-stats">
-                {(c.cpu_pct || 0).toFixed(0)}%
-                {c.mem_usage ? ` · ${c.mem_usage.split(" / ")[0]}` : ""}
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -314,23 +315,21 @@ function BlockCard({
   }
   if (block.type === "unknown_apps") {
     const list = snap.unknown_apps || [];
+    if (!list.length) return null;
     return (
-      <div className="card">
-        <div className="card-title">Unknown apps</div>
-        <div className="card-sub">No catalog / icon match yet</div>
-        <div className="container-list" style={{ marginTop: 12 }}>
-          {list.length === 0 && <span style={{ color: "var(--muted)" }}>None right now</span>}
-          {list.slice(0, 8).map((u, i) => (
-            <div key={i} className="container-row">
-              <div className="container-icon">
+      <div className="apps-panel">
+        <div className="apps-panel-head">
+          <div className="card-title">Unknown apps</div>
+          <div className="card-sub">No catalog / icon match yet</div>
+        </div>
+        <div className="apps-grid">
+          {list.slice(0, 12).map((u, i) => (
+            <div key={i} className="app-tile">
+              <div className="card-icon" style={{ boxShadow: `inset 0 0 0 1px ${ACCENTS[i % ACCENTS.length]}33` }}>
                 <img src={iconUrl(u.icon || "docker")} alt="" />
               </div>
-              <div className="container-meta">
-                <strong>{u.app_name || u.name}</strong>
-                <span>
-                  {u.name} · {u.image}
-                </span>
-              </div>
+              <div className="card-title">{u.app_name || u.name}</div>
+              <div className="card-sub">{u.image}</div>
             </div>
           ))}
         </div>
