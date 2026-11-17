@@ -8,8 +8,9 @@ RUN npm install
 COPY web/ ./
 RUN npm run build
 
-FROM golang:1.24-bookworm AS build
+FROM golang:1.27-bookworm AS build
 WORKDIR /src
+ENV GOTOOLCHAIN=local
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
