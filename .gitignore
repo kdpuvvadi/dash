@@ -1,5 +1,5 @@
 bin/
-dist/
+/dist/
 serve.out
 serve.err
 *.db
@@ -8,10 +8,12 @@ config/app.yml
 config/secrets.yaml
 config/data/
 config/ssh/
+config/README.txt
 caddy-data/
 caddy-config/
 web/node_modules/
 web/dist/
+web/tsconfig.tsbuildinfo
 *.exe
 .DS_Store
 .env
