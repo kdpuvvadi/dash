@@ -63,6 +63,9 @@ export type Container = {
   name: string;
   image: string;
   status: string;
+  state?: string;
+  health?: string;
+  label?: string;
   cpu_pct: number;
   mem_usage?: string;
   net_io?: string;

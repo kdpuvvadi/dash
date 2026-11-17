@@ -317,7 +317,7 @@ func buildSummary(snap store.Snapshot, started time.Time) store.Summary {
 		}
 		for _, c := range h.Containers {
 			total++
-			if strings.Contains(strings.ToLower(c.Status), "up") {
+			if containerIsOnline(c) {
 				online++
 			}
 		}

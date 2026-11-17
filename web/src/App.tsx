@@ -9,7 +9,17 @@ type Hist = Record<string, { t: string; v: number }[]>;
 
 type ServiceKind = "host" | "container" | "app";
 type TypeFilter = "all" | ServiceKind;
-type HealthFilter = "all" | "online" | "offline";
+type HealthFilter =
+  | "all"
+  | "online"
+  | "offline"
+  | "running"
+  | "healthy"
+  | "unhealthy"
+  | "starting"
+  | "restarting"
+  | "paused"
+  | "stopped";
 
 type ServiceCard = {
   key: string;
@@ -19,12 +29,66 @@ type ServiceCard = {
   icon: string;
   url: string;
   online: boolean;
+  statusKey: string;
+  statusLabel: string;
   metricLabel: string;
   metricValue: string;
   spark: { t: string; v: number }[];
   accent: string;
   tint: string;
 };
+
+function parseClientStatus(status: string, state?: string, health?: string, label?: string) {
+  if (label && (state || health)) {
+    const key = health || state || "unknown";
+    return {
+      online: state === "running" || state === "restarting" || state === "paused" || /up/i.test(status),
+      statusKey: key,
+      statusLabel: label,
+    };
+  }
+  const s = (status || "").toLowerCase();
+  let h = (health || "").toLowerCase();
+  if (!h) {
+    if (s.includes("(healthy)")) h = "healthy";
+    else if (s.includes("(unhealthy)")) h = "unhealthy";
+    else if (s.includes("health: starting")) h = "starting";
+  }
+  const st = (state || "").toLowerCase();
+  if (st === "restarting" || s.startsWith("restarting")) {
+    return { online: true, statusKey: "restarting", statusLabel: "Restarting" };
+  }
+  if (st === "paused" || s.startsWith("paused")) {
+    return { online: true, statusKey: "paused", statusLabel: "Paused" };
+  }
+  if (st === "exited" || s.startsWith("exited") || s.startsWith("stopped") || st === "dead" || st === "created") {
+    return { online: false, statusKey: "stopped", statusLabel: "Stopped" };
+  }
+  if (st === "running" || s.startsWith("up")) {
+    if (h === "healthy") return { online: true, statusKey: "healthy", statusLabel: "Healthy" };
+    if (h === "unhealthy") return { online: true, statusKey: "unhealthy", statusLabel: "Unhealthy" };
+    if (h === "starting") return { online: true, statusKey: "starting", statusLabel: "Starting" };
+    return { online: true, statusKey: "running", statusLabel: "Running" };
+  }
+  return {
+    online: /up/i.test(status),
+    statusKey: st || "unknown",
+    statusLabel: label || status || "Unknown",
+  };
+}
+
+function matchesHealthFilter(card: ServiceCard, filter: HealthFilter) {
+  if (filter === "all") return true;
+  if (filter === "online") return card.online;
+  if (filter === "offline") return !card.online;
+  if (filter === "stopped") {
+    return card.statusKey === "stopped" || card.statusKey === "dead" || card.statusKey === "created";
+  }
+  if (filter === "running") {
+    return card.statusKey === "running" || card.statusKey === "healthy" || card.statusKey === "unhealthy" || card.statusKey === "starting";
+  }
+  return card.statusKey === filter;
+}
 
 function pushLiveHistory(prev: Hist, snap: Snapshot): Hist {
   const next: Hist = { ...prev };
@@ -95,6 +159,8 @@ function buildServices(snap: Snapshot, history: Hist, category: string): Service
       icon: h.icon || (h.role === "proxmox" ? "proxmox" : h.role === "docker" ? "docker" : "linux"),
       url: hostUrl(h),
       online: !!h.online,
+      statusKey: h.online ? "running" : "stopped",
+      statusLabel: h.online ? "Online" : "Offline",
       metricLabel: "CPU",
       metricValue: `${(h.cpu_pct || 0).toFixed(0)}%`,
       spark: history[`${h.name}:cpu`] || [],
@@ -123,16 +189,9 @@ function buildServices(snap: Snapshot, history: Hist, category: string): Service
 }
 
 function containerCard(c: Container, host: HostSnap, accent: string, history: Hist): ServiceCard {
-  const up = /up/i.test(c.status);
+  const st = parseClientStatus(c.status, c.state, c.health, c.label);
   const mem = c.mem_usage ? c.mem_usage.split(" / ")[0] : "";
-  const metricValue =
-    c.cpu_pct && c.cpu_pct > 0
-      ? `${c.cpu_pct.toFixed(0)}%`
-      : mem
-        ? mem
-        : up
-          ? "running"
-          : "stopped";
+  const showResource = st.online && (c.cpu_pct > 0 || !!mem);
   return {
     key: `ct:${host.name}:${c.id}`,
     kind: "container",
@@ -140,9 +199,15 @@ function containerCard(c: Container, host: HostSnap, accent: string, history: Hi
     sub: c.app_name && c.app_name !== c.name ? c.name : host.name,
     icon: c.icon || "docker",
     url: hostUrl(host),
-    online: up,
-    metricLabel: c.cpu_pct && c.cpu_pct > 0 ? "CPU" : mem ? "Memory" : "Status",
-    metricValue,
+    online: st.online,
+    statusKey: st.statusKey,
+    statusLabel: st.statusLabel,
+    metricLabel: showResource ? (c.cpu_pct > 0 ? "CPU" : "Memory") : "Status",
+    metricValue: showResource
+      ? c.cpu_pct > 0
+        ? `${c.cpu_pct.toFixed(0)}%`
+        : mem
+      : st.statusLabel,
     spark: history[`${host.name}:cpu`] || [],
     accent,
     tint: hexAlpha(accent, 0.08),
@@ -166,6 +231,8 @@ function appCard(app: AppSnap, accent: string): ServiceCard {
     icon: app.icon || app.type,
     url: url || `${app.name}.home`,
     online: !!app.online,
+    statusKey: app.online ? "running" : "stopped",
+    statusLabel: app.online ? "Online" : "Offline",
     metricLabel: fieldKey || "Status",
     metricValue: String(fieldVal),
     spark: [],
@@ -219,9 +286,7 @@ export default function App() {
   const services = useMemo(() => {
     return allServices.filter((s) => {
       if (typeFilter !== "all" && s.kind !== typeFilter) return false;
-      if (healthFilter === "online" && !s.online) return false;
-      if (healthFilter === "offline" && s.online) return false;
-      return true;
+      return matchesHealthFilter(s, healthFilter);
     });
   }, [allServices, typeFilter, healthFilter]);
 
@@ -333,6 +398,13 @@ export default function App() {
                   <option value="all">All status</option>
                   <option value="online">Online</option>
                   <option value="offline">Offline</option>
+                  <option value="running">Running</option>
+                  <option value="healthy">Healthy</option>
+                  <option value="unhealthy">Unhealthy</option>
+                  <option value="starting">Starting</option>
+                  <option value="restarting">Restarting</option>
+                  <option value="paused">Paused</option>
+                  <option value="stopped">Stopped</option>
                 </select>
               </label>
             </div>
@@ -370,7 +442,10 @@ export default function App() {
 function ServiceTile({ card }: { card: ServiceCard }) {
   const inner = (
     <>
-      <span className={`card-online ${card.online ? "on" : ""}`} />
+      <span className={`status-badge status-${card.statusKey}`} title={card.statusLabel}>
+        <span className="status-dot" />
+        {card.statusLabel}
+      </span>
       <div className="card-body">
         <div className="card-left">
           <div

@@ -82,7 +82,10 @@ type Container struct {
 	ID       string  `json:"id"`
 	Name     string  `json:"name"`
 	Image    string  `json:"image"`
-	Status   string  `json:"status"`
+	Status   string  `json:"status"`             // raw Docker status string
+	State    string  `json:"state,omitempty"`    // running, stopped, restarting, …
+	Health   string  `json:"health,omitempty"`   // healthy, unhealthy, starting
+	Label    string  `json:"label,omitempty"`    // display label e.g. Healthy
 	CPUPct   float64 `json:"cpu_pct"`
 	MemUsage string  `json:"mem_usage"`
 	NetIO    string  `json:"net_io"`

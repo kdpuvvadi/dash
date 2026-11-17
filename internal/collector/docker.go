@@ -76,6 +76,7 @@ func collectDocker(run func(string) (string, error), hostRef, guestID string, us
 			GuestID: guestID,
 			Ports:   parsePorts(row["Ports"]),
 		}
+		c.State, c.Health, c.Label = ParseContainerStatus("", c.Status)
 		if st, ok := statsByID[c.ID]; ok {
 			c.CPUPct = parsePct(st["CPUPerc"])
 			c.MemUsage = st["MemUsage"]
@@ -150,6 +151,7 @@ func CollectDockerSock(sock, hostRef, guestID string) ([]store.Container, error)
 			GuestID: guestID,
 			Ports:   ports,
 		}
+		c.State, c.Health, c.Label = ParseContainerStatus(row.State, row.Status)
 		if strings.EqualFold(row.State, "running") {
 			if st, err := dockerContainerStats(client, row.ID); err == nil {
 				c.CPUPct = st.cpu
@@ -246,6 +248,64 @@ func shortID(id string) string {
 		return id[:12]
 	}
 	return id
+}
+
+// ParseContainerStatus normalizes Docker State/Status into state, health, and a short label.
+// Examples: "Up 2h (healthy)" → running, healthy, Healthy
+func ParseContainerStatus(state, status string) (norm, health, label string) {
+	st := strings.ToLower(strings.TrimSpace(state))
+	s := strings.ToLower(strings.TrimSpace(status))
+
+	switch {
+	case strings.Contains(s, "(healthy)"):
+		health = "healthy"
+	case strings.Contains(s, "(unhealthy)"):
+		health = "unhealthy"
+	case strings.Contains(s, "health: starting") || strings.Contains(s, "(health: starting)"):
+		health = "starting"
+	}
+
+	switch {
+	case st == "restarting" || strings.HasPrefix(s, "restarting"):
+		return "restarting", health, "Restarting"
+	case st == "paused" || strings.HasPrefix(s, "paused"):
+		return "paused", health, "Paused"
+	case st == "removing" || strings.HasPrefix(s, "removing"):
+		return "removing", health, "Removing"
+	case st == "dead" || strings.HasPrefix(s, "dead"):
+		return "dead", health, "Dead"
+	case st == "created" || strings.HasPrefix(s, "created"):
+		return "created", health, "Created"
+	case st == "exited" || strings.HasPrefix(s, "exited") || strings.HasPrefix(s, "stopped"):
+		return "stopped", health, "Stopped"
+	case st == "running" || strings.HasPrefix(s, "up"):
+		switch health {
+		case "healthy":
+			return "running", health, "Healthy"
+		case "unhealthy":
+			return "running", health, "Unhealthy"
+		case "starting":
+			return "running", health, "Starting"
+		default:
+			return "running", health, "Running"
+		}
+	}
+
+	if st != "" {
+		return st, health, strings.ToUpper(st[:1]) + st[1:]
+	}
+	if s != "" {
+		return "unknown", health, status
+	}
+	return "unknown", health, "Unknown"
+}
+
+func containerIsOnline(c store.Container) bool {
+	switch c.State {
+	case "running", "restarting", "paused":
+		return true
+	}
+	return strings.Contains(strings.ToLower(c.Status), "up")
 }
 
 func parsePct(s string) float64 {
