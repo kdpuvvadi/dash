@@ -14,7 +14,11 @@ caddy-config/
 web/node_modules/
 web/dist/
 web/tsconfig.tsbuildinfo
+# Built by Docker (or npm run build). Only the stub index.html is tracked for go:embed.
+internal/embedui/dist/**
+!internal/embedui/dist/index.html
 *.exe
 .DS_Store
 .env
 compose.override.yml
+Dockerfile.runtime

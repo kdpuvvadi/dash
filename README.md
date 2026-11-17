@@ -44,8 +44,18 @@ docker compose up -d
 
 Push to `main` (or run **Build and push** manually) runs `.github/workflows/publish.yml`:
 
-- Builds the multi-stage `Dockerfile`
+- Builds the multi-stage `Dockerfile` (**Vite UI + Go binary inside Docker** — nothing to pre-build on your laptop)
 - Pushes to `ghcr.io/<github.repository>:latest` (and version tags on `v*`)
+
+On the server after CI finishes:
+
+```bash
+cd ~/dash && docker compose pull && docker compose up -d
+```
+
+Do **not** commit `web/dist` or `internal/embedui/dist/assets`. Only a tiny stub `internal/embedui/dist/index.html` exists so local `go build` / tests compile; the real UI is copied in during the Docker build.
+
+For a one-off image build on the LXC (no GHCR wait): `./scripts/deploy-lxc.sh root@10.20.20.24`
 
 ## Docs
 
