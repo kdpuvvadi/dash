@@ -9,7 +9,14 @@ type Hist = Record<string, { t: string; v: number }[]>;
 
 type Page = "overview" | "hosts";
 type ServiceKind = "container" | "app" | "lxc" | "vm";
-type TypeFilter = "all" | ServiceKind;
+/** UI tabs: Apps = Docker containers (+ catalog apps). */
+type TypeFilter = "all" | "apps" | "lxc" | "vm";
+
+function matchesTypeFilter(kind: ServiceKind, filter: TypeFilter) {
+  if (filter === "all") return true;
+  if (filter === "apps") return kind === "container" || kind === "app";
+  return kind === filter;
+}
 type HealthFilter =
   | "all"
   | "online"
@@ -298,28 +305,32 @@ export default function App() {
     return buildServices(snap, history, category);
   }, [snap, history, category]);
 
-  const typeOptions = useMemo(() => {
+  const typeTabs = useMemo(() => {
     const kinds = new Set(allServices.map((s) => s.kind));
-    const opts: { value: TypeFilter; label: string }[] = [{ value: "all", label: "All types" }];
-    if (kinds.has("container")) opts.push({ value: "container", label: "Containers" });
-    if (kinds.has("lxc")) opts.push({ value: "lxc", label: "LXCs" });
-    if (kinds.has("vm")) opts.push({ value: "vm", label: "VMs" });
-    if (kinds.has("app")) opts.push({ value: "app", label: "Apps" });
-    return opts;
+    const count = (pred: (k: ServiceKind) => boolean) =>
+      allServices.filter((s) => pred(s.kind)).length;
+    const tabs: { value: TypeFilter; label: string; count: number }[] = [
+      { value: "all", label: "All", count: allServices.length },
+    ];
+    const appsCount = count((k) => k === "container" || k === "app");
+    if (appsCount > 0) tabs.push({ value: "apps", label: "Apps", count: appsCount });
+    if (kinds.has("lxc")) tabs.push({ value: "lxc", label: "LXCs", count: count((k) => k === "lxc") });
+    if (kinds.has("vm")) tabs.push({ value: "vm", label: "VMs", count: count((k) => k === "vm") });
+    return tabs;
   }, [allServices]);
 
   const services = useMemo(() => {
     return allServices.filter((s) => {
-      if (typeFilter !== "all" && s.kind !== typeFilter) return false;
+      if (!matchesTypeFilter(s.kind, typeFilter)) return false;
       return matchesHealthFilter(s, healthFilter);
     });
   }, [allServices, typeFilter, healthFilter]);
 
   useEffect(() => {
-    if (typeFilter !== "all" && !typeOptions.some((o) => o.value === typeFilter)) {
+    if (typeFilter !== "all" && !typeTabs.some((t) => t.value === typeFilter)) {
       setTypeFilter("all");
     }
-  }, [typeFilter, typeOptions]);
+  }, [typeFilter, typeTabs]);
 
   if (!layout || !snap) {
     return (
@@ -431,41 +442,42 @@ export default function App() {
                 Your services <span className="count">{countLabel}</span>
               </h2>
               <div className="section-tools">
-                <div className="filter-menu" role="group" aria-label="Filter services">
-                  <label className="filter-field">
-                    <span>Type</span>
-                    <select
-                      value={typeFilter}
-                      onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
-                    >
-                      {typeOptions.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="filter-field">
-                    <span>Health</span>
-                    <select
-                      value={healthFilter}
-                      onChange={(e) => setHealthFilter(e.target.value as HealthFilter)}
-                    >
-                      <option value="all">All status</option>
-                      <option value="online">Online</option>
-                      <option value="offline">Offline</option>
-                      <option value="running">Running</option>
-                      <option value="healthy">Healthy</option>
-                      <option value="unhealthy">Unhealthy</option>
-                      <option value="starting">Starting</option>
-                      <option value="restarting">Restarting</option>
-                      <option value="paused">Paused</option>
-                      <option value="stopped">Stopped</option>
-                    </select>
-                  </label>
-                </div>
+                <label className="filter-field">
+                  <span>Health</span>
+                  <select
+                    value={healthFilter}
+                    onChange={(e) => setHealthFilter(e.target.value as HealthFilter)}
+                  >
+                    <option value="all">All status</option>
+                    <option value="online">Online</option>
+                    <option value="offline">Offline</option>
+                    <option value="running">Running</option>
+                    <option value="healthy">Healthy</option>
+                    <option value="unhealthy">Unhealthy</option>
+                    <option value="starting">Starting</option>
+                    <option value="restarting">Restarting</option>
+                    <option value="paused">Paused</option>
+                    <option value="stopped">Stopped</option>
+                  </select>
+                </label>
                 <div className="range">Live · every {layout.poll_seconds || 5}s</div>
               </div>
+            </div>
+
+            <div className="type-tabs" role="tablist" aria-label="Service type">
+              {typeTabs.map((t) => (
+                <button
+                  key={t.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={typeFilter === t.value}
+                  className={typeFilter === t.value ? "active" : ""}
+                  onClick={() => setTypeFilter(t.value)}
+                >
+                  {t.label}
+                  <span className="tab-count">{t.count}</span>
+                </button>
+              ))}
             </div>
 
             {services.length === 0 ? (
