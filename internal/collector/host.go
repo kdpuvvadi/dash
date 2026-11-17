@@ -3,6 +3,7 @@ package collector
 import (
 	"bufio"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -27,6 +28,33 @@ func hostPath(p string) string {
 		return p
 	}
 	return filepath.Join(root, strings.TrimPrefix(p, "/"))
+}
+
+// withHostMountNS wraps run() so /proc reads see the real machine (LXC/VM host)
+// instead of the container's view. Docker-in-LXC bypasses lxcfs, so MemTotal looks
+// like the Proxmox node; nsenter -t 1 -m restores the guest's virtualized /proc.
+// Requires pid: host and CAP_SYS_ADMIN (see compose.yaml). Disable with DASH_NSENTER=0.
+func withHostMountNS(run func(string) (string, error)) func(string) (string, error) {
+	if !canNsenterHost() {
+		return run
+	}
+	return func(cmd string) (string, error) {
+		return run("nsenter -t 1 -m -- sh -c " + shellQuote(cmd))
+	}
+}
+
+func canNsenterHost() bool {
+	if v := strings.TrimSpace(os.Getenv("DASH_NSENTER")); v == "0" || strings.EqualFold(v, "false") {
+		return false
+	}
+	if _, err := os.Stat("/.dockerenv"); err != nil {
+		return false
+	}
+	if _, err := exec.LookPath("nsenter"); err != nil {
+		return false
+	}
+	out, err := exec.Command("nsenter", "-t", "1", "-m", "--", "true").CombinedOutput()
+	return err == nil && len(strings.TrimSpace(string(out))) == 0
 }
 
 func CollectHostMetrics(run func(string) (string, error)) (*store.HostSnap, error) {

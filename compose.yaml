@@ -2,7 +2,12 @@ services:
   dash:
     image: ghcr.io/${GITHUB_OWNER:-kdpuvvadi}/dash:${DASH_TAG:-latest}
     container_name: dash
+    # pid:host + SYS_ADMIN: nsenter into the LXC mount ns so /proc/meminfo
+    # is the guest view (lxcfs), not the Proxmox node's RAM.
     pid: host
+    cap_add:
+      - SYS_ADMIN
+      - SYS_PTRACE
     network_mode: host
     volumes:
       - ./config:/config

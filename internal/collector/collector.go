@@ -257,8 +257,9 @@ func (c *Collector) collectLocal(name string) (*store.HostSnap, []store.UnknownA
 		out, err := exec.Command("sh", "-c", cmd).CombinedOutput()
 		return strings.TrimSpace(string(out)), err
 	}
-	// On Windows dev hosts, local sh may fail — still try docker
-	hs, err := CollectHostMetrics(run)
+	// On Windows dev hosts, local sh may fail — still try docker.
+	// Host /proc goes through nsenter when dash runs in Docker on LXC (lxcfs).
+	hs, err := CollectHostMetrics(withHostMountNS(run))
 	if err != nil || hs == nil {
 		hs = &store.HostSnap{Online: true, Role: "docker", Hostname: name}
 	}
