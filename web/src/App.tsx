@@ -167,25 +167,42 @@ export default function App() {
               return true;
             });
             if (!blocks.length) return null;
+            const isPanel = (b: Block) => b.type === "containers" || b.type === "unknown_apps";
+            const inline = blocks.filter((b) => !isPanel(b));
+            const panels = blocks.filter(isPanel);
+            const cols = Math.max(1, Math.min(row.columns || inline.length || 1, inline.length || 1));
             return (
-              <div key={idx}>
+              <div key={idx} className="row-stack">
                 {row.group && <div className="group-label">{groups[row.group] || row.group}</div>}
-                <div
-                  className="row-grid"
-                  style={{ gridTemplateColumns: `repeat(${Math.min(row.columns || blocks.length, blocks.length) || 1}, minmax(0, 1fr))` }}
-                >
-                  {blocks.map((b, i) => (
-                    <BlockCard
-                      key={i}
-                      block={b}
-                      snap={snap}
-                      history={history}
-                      accent={ACCENTS[i % ACCENTS.length]}
-                      requestUrl={layout.app_request_url}
-                      repoUrl={layout.repo_url}
-                    />
-                  ))}
-                </div>
+                {inline.length > 0 && (
+                  <div
+                    className="row-grid"
+                    style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+                  >
+                    {inline.map((b, i) => (
+                      <BlockCard
+                        key={i}
+                        block={b}
+                        snap={snap}
+                        history={history}
+                        accent={ACCENTS[i % ACCENTS.length]}
+                        requestUrl={layout.app_request_url}
+                        repoUrl={layout.repo_url}
+                      />
+                    ))}
+                  </div>
+                )}
+                {panels.map((b, i) => (
+                  <BlockCard
+                    key={`panel-${i}`}
+                    block={b}
+                    snap={snap}
+                    history={history}
+                    accent={ACCENTS[(inline.length + i) % ACCENTS.length]}
+                    requestUrl={layout.app_request_url}
+                    repoUrl={layout.repo_url}
+                  />
+                ))}
               </div>
             );
           })}

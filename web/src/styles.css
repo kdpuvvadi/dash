@@ -234,10 +234,20 @@ button {
   text-transform: uppercase;
 }
 
+.row-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
 .row-grid {
   display: grid;
   gap: 14px;
-  margin-bottom: 14px;
+}
+
+.apps-panel {
+  width: 100%;
 }
 
 .card {
@@ -366,7 +376,6 @@ button {
 }
 
 .apps-panel {
-  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   gap: 12px;
