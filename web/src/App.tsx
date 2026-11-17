@@ -7,7 +7,8 @@ const ACCENTS = ["#fb923c", "#38bdf8", "#a78bfa", "#f472b6", "#2dd4bf", "#fbbf24
 
 type Hist = Record<string, { t: string; v: number }[]>;
 
-type ServiceKind = "host" | "container" | "app";
+type Page = "overview" | "hosts";
+type ServiceKind = "container" | "app";
 type TypeFilter = "all" | ServiceKind;
 type HealthFilter =
   | "all"
@@ -150,24 +151,6 @@ function buildServices(snap: Snapshot, history: Hist, category: string): Service
   let i = 0;
 
   for (const h of filtered) {
-    const accent = ACCENTS[i++ % ACCENTS.length];
-    cards.push({
-      key: `host:${h.name}`,
-      kind: "host",
-      title: h.name,
-      sub: roleLabel(h.role),
-      icon: h.icon || (h.role === "proxmox" ? "proxmox" : h.role === "docker" ? "docker" : "linux"),
-      url: hostUrl(h),
-      online: !!h.online,
-      statusKey: h.online ? "running" : "stopped",
-      statusLabel: h.online ? "Online" : "Offline",
-      metricLabel: "CPU",
-      metricValue: `${(h.cpu_pct || 0).toFixed(0)}%`,
-      spark: history[`${h.name}:cpu`] || [],
-      accent,
-      tint: hexAlpha(accent, 0.08),
-    });
-
     for (const c of h.containers || []) {
       const accentC = ACCENTS[i++ % ACCENTS.length];
       cards.push(containerCard(c, h, accentC, history));
@@ -176,7 +159,6 @@ function buildServices(snap: Snapshot, history: Hist, category: string): Service
 
   for (const app of Object.values(snap.apps || {})) {
     if (category && app.category && app.category !== category) continue;
-    // skip apps that duplicate a container already shown
     const dup = cards.some(
       (c) => c.title.toLowerCase() === (app.name || "").toLowerCase() || c.key.includes(app.id)
     );
@@ -186,6 +168,12 @@ function buildServices(snap: Snapshot, history: Hist, category: string): Service
   }
 
   return cards;
+}
+
+function hostList(snap: Snapshot, category: string): HostSnap[] {
+  const hosts = Object.values(snap.hosts || {});
+  if (!category) return hosts;
+  return hosts.filter((h) => !h.category || h.category === category);
 }
 
 function containerCard(c: Container, host: HostSnap, accent: string, history: Hist): ServiceCard {
@@ -246,6 +234,7 @@ export default function App() {
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [history, setHistory] = useState<Hist>({});
   const [connected, setConnected] = useState(false);
+  const [page, setPage] = useState<Page>("overview");
   const [category, setCategory] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [healthFilter, setHealthFilter] = useState<HealthFilter>("all");
@@ -303,6 +292,8 @@ export default function App() {
   const total = summary?.services_total ?? 0;
   const allOk = online >= total && total > 0;
   const countLabel = String(services.length).padStart(2, "0");
+  const hosts = hostList(snap, category);
+  const hostsOnline = hosts.filter((h) => h.online).length;
 
   return (
     <div className="app">
@@ -316,16 +307,35 @@ export default function App() {
           <span>{layout.brand?.name || "homelab"}</span>
         </div>
         <nav className="nav">
-          {(layout.categories || []).map((c) => (
-            <button
-              key={c.id}
-              className={category === c.id ? "active" : ""}
-              onClick={() => setCategory(c.id)}
-              type="button"
-            >
-              {c.name}
-            </button>
-          ))}
+          <button
+            className={page === "overview" ? "active" : ""}
+            onClick={() => setPage("overview")}
+            type="button"
+          >
+            Overview
+          </button>
+          <button
+            className={page === "hosts" ? "active" : ""}
+            onClick={() => setPage("hosts")}
+            type="button"
+          >
+            Hosts
+          </button>
+          {(layout.categories || [])
+            .filter((c) => c.id !== "overview")
+            .map((c) => (
+              <button
+                key={c.id}
+                className={page === "overview" && category === c.id ? "active" : ""}
+                onClick={() => {
+                  setPage("overview");
+                  setCategory(c.id);
+                }}
+                type="button"
+              >
+                {c.name}
+              </button>
+            ))}
         </nav>
         <div className={`status-pill ${connected ? "ok" : ""}`}>
           <span className="dot" />
@@ -333,95 +343,136 @@ export default function App() {
         </div>
       </header>
 
-      <section className="hero">
-        <div className="hero-copy">
-          <h1>{layout.brand?.tagline || "A little lab. A lot of possibility."}</h1>
-          <p className="hero-sub">All your apps, right where they belong.</p>
-        </div>
-        <div className="local-time">
-          <div className="label">LOCAL TIME</div>
-          <div className="value">{clock}</div>
-        </div>
-      </section>
-
-      <section className="summary">
-        <div className="summary-item">
-          <div className="k">System Status</div>
-          <div className="v">
-            <span className={`dot ${allOk ? "ok" : ""}`} />
-            {summary?.status || (allOk ? "All systems operational" : "Attention needed")}
-          </div>
-        </div>
-        <div className="summary-item">
-          <div className="k">Services</div>
-          <div className="v">
-            {online} / {total} online
-          </div>
-        </div>
-        <div className="summary-item">
-          <div className="k">Uptime</div>
-          <div className="v">{summary?.uptime_human || "—"}</div>
-        </div>
-        <div className="summary-item">
-          <div className="k">Storage</div>
-          <div className="v">
-            {summary?.storage_used || "—"} / {summary?.storage_total || "—"}
-          </div>
-        </div>
-      </section>
-
-      <section className="services">
-        <div className="section-head">
-          <h2>
-            Your services <span className="count">{countLabel}</span>
-          </h2>
-          <div className="section-tools">
-            <div className="filter-menu" role="group" aria-label="Filter services">
-              <label className="filter-field">
-                <span>Type</span>
-                <select
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
-                >
-                  <option value="all">All types</option>
-                  <option value="host">Hosts</option>
-                  <option value="container">Containers</option>
-                  <option value="app">Apps</option>
-                </select>
-              </label>
-              <label className="filter-field">
-                <span>Health</span>
-                <select
-                  value={healthFilter}
-                  onChange={(e) => setHealthFilter(e.target.value as HealthFilter)}
-                >
-                  <option value="all">All status</option>
-                  <option value="online">Online</option>
-                  <option value="offline">Offline</option>
-                  <option value="running">Running</option>
-                  <option value="healthy">Healthy</option>
-                  <option value="unhealthy">Unhealthy</option>
-                  <option value="starting">Starting</option>
-                  <option value="restarting">Restarting</option>
-                  <option value="paused">Paused</option>
-                  <option value="stopped">Stopped</option>
-                </select>
-              </label>
+      {page === "overview" ? (
+        <>
+          <section className="hero">
+            <div className="hero-copy">
+              <h1>{layout.brand?.tagline || "A little lab. A lot of possibility."}</h1>
+              <p className="hero-sub">All your apps, right where they belong.</p>
             </div>
-            <div className="range">Live · every {layout.poll_seconds || 5}s</div>
-          </div>
-        </div>
+            <div className="local-time">
+              <div className="label">LOCAL TIME</div>
+              <div className="value">{clock}</div>
+            </div>
+          </section>
 
-        {services.length === 0 ? (
-          <p className="empty-filter">No services match these filters.</p>
-        ) : (
-          <div className="service-grid">
-            {services.map((s) => (
-              <ServiceTile key={s.key} card={s} />
-            ))}
-          </div>
-        )}
-      </section>
+          <section className="summary">
+            <div className="summary-item">
+              <div className="k">System Status</div>
+              <div className="v">
+                <span className={`dot ${allOk ? "ok" : ""}`} />
+                {summary?.status || (allOk ? "All systems operational" : "Attention needed")}
+              </div>
+            </div>
+            <div className="summary-item">
+              <div className="k">Services</div>
+              <div className="v">
+                {online} / {total} online
+              </div>
+            </div>
+            <div className="summary-item">
+              <div className="k">Uptime</div>
+              <div className="v">{summary?.uptime_human || "—"}</div>
+            </div>
+            <div className="summary-item">
+              <div className="k">Storage</div>
+              <div className="v">
+                {summary?.storage_used || "—"} / {summary?.storage_total || "—"}
+              </div>
+            </div>
+          </section>
+
+          <section className="services">
+            <div className="section-head">
+              <h2>
+                Your services <span className="count">{countLabel}</span>
+              </h2>
+              <div className="section-tools">
+                <div className="filter-menu" role="group" aria-label="Filter services">
+                  <label className="filter-field">
+                    <span>Type</span>
+                    <select
+                      value={typeFilter}
+                      onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
+                    >
+                      <option value="all">All types</option>
+                      <option value="container">Containers</option>
+                      <option value="app">Apps</option>
+                    </select>
+                  </label>
+                  <label className="filter-field">
+                    <span>Health</span>
+                    <select
+                      value={healthFilter}
+                      onChange={(e) => setHealthFilter(e.target.value as HealthFilter)}
+                    >
+                      <option value="all">All status</option>
+                      <option value="online">Online</option>
+                      <option value="offline">Offline</option>
+                      <option value="running">Running</option>
+                      <option value="healthy">Healthy</option>
+                      <option value="unhealthy">Unhealthy</option>
+                      <option value="starting">Starting</option>
+                      <option value="restarting">Restarting</option>
+                      <option value="paused">Paused</option>
+                      <option value="stopped">Stopped</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="range">Live · every {layout.poll_seconds || 5}s</div>
+              </div>
+            </div>
+
+            {services.length === 0 ? (
+              <p className="empty-filter">No services match these filters.</p>
+            ) : (
+              <div className="service-grid">
+                {services.map((s) => (
+                  <ServiceTile key={s.key} card={s} />
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      ) : (
+        <>
+          <section className="hero hero-compact">
+            <div className="hero-copy">
+              <h1>Hosts</h1>
+              <p className="hero-sub">
+                {hostsOnline} / {hosts.length} online · machine CPU, memory, disk, and network
+              </p>
+            </div>
+            <div className="local-time">
+              <div className="label">LOCAL TIME</div>
+              <div className="value">{clock}</div>
+            </div>
+          </section>
+
+          <section className="hosts-page">
+            <div className="section-head">
+              <h2>
+                Machines <span className="count">{String(hosts.length).padStart(2, "0")}</span>
+              </h2>
+              <div className="range">Live · every {layout.poll_seconds || 5}s</div>
+            </div>
+            {hosts.length === 0 ? (
+              <p className="empty-filter">No hosts configured.</p>
+            ) : (
+              <div className="host-list">
+                {hosts.map((h, i) => (
+                  <HostDetailCard
+                    key={h.name}
+                    host={h}
+                    history={history}
+                    accent={ACCENTS[i % ACCENTS.length]}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      )}
 
       <footer className="footer">
         <span>
@@ -435,6 +486,93 @@ export default function App() {
           {snap.updated_at ? new Date(snap.updated_at).toLocaleTimeString() : "—"}
         </span>
       </footer>
+    </div>
+  );
+}
+
+function HostDetailCard({
+  host,
+  history,
+  accent,
+}: {
+  host: HostSnap;
+  history: Hist;
+  accent: string;
+}) {
+  const cts = host.containers || [];
+  const running = cts.filter((c) => /up/i.test(c.status) || c.state === "running").length;
+  return (
+    <div className="host-detail" style={{ background: hexAlpha(accent, 0.06) }}>
+      <span className={`status-badge ${host.online ? "status-running" : "status-stopped"}`}>
+        <span className="status-dot" />
+        {host.online ? "Online" : "Offline"}
+      </span>
+      <div className="host-detail-head">
+        <div
+          className="card-icon"
+          style={{
+            background: hexAlpha(accent, 0.14),
+            boxShadow: `inset 0 0 0 1px ${hexAlpha(accent, 0.28)}`,
+          }}
+        >
+          <img
+            src={iconUrl(
+              host.icon || (host.role === "proxmox" ? "proxmox" : host.role === "docker" ? "docker" : "linux")
+            )}
+            alt=""
+          />
+        </div>
+        <div className="host-detail-id">
+          <div className="card-title">{host.name}</div>
+          <div className="card-sub">
+            {host.hostname || hostUrl(host)}
+            {host.os ? ` · ${host.os}` : ""}
+            {` · ${roleLabel(host.role)}`}
+          </div>
+          {host.error && <div className="badge">{host.error}</div>}
+        </div>
+        <div className="host-detail-meta">
+          {cts.length > 0 && (
+            <div className="host-meta-pill">
+              {running}/{cts.length} containers
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="host-detail-metrics">
+        <div className="host-metric-block">
+          <div className="metric-label">CPU</div>
+          <div className="metric-value" style={{ color: accent }}>
+            {(host.cpu_pct || 0).toFixed(0)}%
+          </div>
+          <Sparkline points={history[`${host.name}:cpu`] || []} color={accent} />
+        </div>
+        <div className="host-metric-block">
+          <div className="metric-label">Memory</div>
+          <div className="metric-value" style={{ color: accent }}>
+            {(host.mem_pct || 0).toFixed(0)}%
+          </div>
+          <div className="metric-sub">
+            {formatBytes(host.mem_used)} / {formatBytes(host.mem_total)}
+          </div>
+        </div>
+        <div className="host-metric-block">
+          <div className="metric-label">Disk</div>
+          <div className="metric-value" style={{ color: accent }}>
+            {(host.disk_pct || 0).toFixed(0)}%
+          </div>
+          <div className="metric-sub">
+            {formatBytes(host.disk_used)} / {formatBytes(host.disk_total)}
+          </div>
+        </div>
+        <div className="host-metric-block">
+          <div className="metric-label">Network</div>
+          <div className="metric-value net" style={{ color: accent }}>
+            ↓ {formatRate(host.net_rx_bps)}
+            <span className="net-sep">·</span>↑ {formatRate(host.net_tx_bps)}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
