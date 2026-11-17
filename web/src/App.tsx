@@ -398,43 +398,43 @@ function HostCard({
         <div className="card-icon" style={{ boxShadow: `inset 0 0 0 1px ${accent}33` }}>
           <img src={iconUrl(icon || host.icon || "linux")} alt="" />
         </div>
-        <div>
+        <div className="host-id">
           <div className="card-title">{host.name}</div>
           <div className="card-sub">{host.hostname || host.os || host.role}</div>
           {host.error && <div className="badge">{host.error}</div>}
         </div>
       </div>
       <div className="host-metrics">
-        <div>
-          <div className="metric-label">CPU</div>
-          <div className="metric-value" style={{ color: accent }}>
+        <div className="host-metric">
+          <span className="metric-label">CPU</span>
+          <span className="metric-value" style={{ color: accent }}>
             {(host.cpu_pct || 0).toFixed(0)}%
-          </div>
+          </span>
           <Sparkline points={history[`${host.name}:cpu`] || []} color={accent} />
         </div>
-        <div>
-          <div className="metric-label">Memory</div>
-          <div className="metric-value" style={{ color: accent }}>
+        <div className="host-metric">
+          <span className="metric-label">Mem</span>
+          <span className="metric-value" style={{ color: accent }}>
             {(host.mem_pct || 0).toFixed(0)}%
-          </div>
-          <div className="metric-sub">
+          </span>
+          <span className="metric-sub">
             {formatBytes(host.mem_used)} / {formatBytes(host.mem_total)}
-          </div>
+          </span>
         </div>
-        <div>
-          <div className="metric-label">Disk</div>
-          <div className="metric-value" style={{ color: accent }}>
+        <div className="host-metric">
+          <span className="metric-label">Disk</span>
+          <span className="metric-value" style={{ color: accent }}>
             {(host.disk_pct || 0).toFixed(0)}%
-          </div>
-          <div className="metric-sub">
+          </span>
+          <span className="metric-sub">
             {formatBytes(host.disk_used)} / {formatBytes(host.disk_total)}
-          </div>
+          </span>
         </div>
-        <div>
-          <div className="metric-label">Network</div>
-          <div className="metric-value" style={{ color: accent }}>
+        <div className="host-metric">
+          <span className="metric-label">Net</span>
+          <span className="metric-value" style={{ color: accent }}>
             ↓ {formatRate(host.net_rx_bps)} · ↑ {formatRate(host.net_tx_bps)}
-          </div>
+          </span>
         </div>
       </div>
     </div>

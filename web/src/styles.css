@@ -347,34 +347,91 @@ button {
 }
 
 .host-card {
-  display: grid;
-  grid-template-columns: minmax(160px, 220px) 1fr;
-  gap: 20px 28px;
+  display: flex;
   align-items: center;
-  min-height: 120px;
+  gap: 18px 24px;
+  min-height: 0;
+  padding: 12px 16px;
 }
 
 .host-head {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding-right: 8px;
+  gap: 10px;
+  flex: 0 0 auto;
+  min-width: 140px;
+  max-width: 220px;
+  padding-right: 4px;
+}
+
+.host-id {
+  min-width: 0;
+}
+
+.host-id .card-title {
+  font-size: 0.98rem;
+  line-height: 1.2;
+}
+
+.host-id .card-sub {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.host-card .card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.host-card .card-icon img {
+  width: 22px;
+  height: 22px;
 }
 
 .host-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px 18px;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px 20px;
+  min-width: 0;
 }
 
-.host-metrics .metric-value {
-  font-size: 1.2rem;
+.host-metric {
+  display: flex;
+  align-items: baseline;
+  gap: 6px 8px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.host-metric .metric-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.host-metric .metric-value {
+  font-size: 1rem;
   white-space: nowrap;
 }
 
-.host-metrics .spark {
-  margin-top: 6px;
-  height: 28px;
+.host-metric .metric-sub {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.host-metric .spark {
+  margin: 0;
+  height: 22px;
+  width: 72px;
+  flex-shrink: 0;
 }
 
 .apps-panel {
@@ -492,10 +549,18 @@ button {
     text-align: left;
   }
   .host-card {
-    grid-template-columns: 1fr;
+    flex-wrap: wrap;
+  }
+  .host-head {
+    max-width: none;
+    width: 100%;
   }
   .host-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .host-metric {
+    flex: 1 1 40%;
   }
 }
 
@@ -513,7 +578,7 @@ button {
   .row-grid {
     grid-template-columns: 1fr !important;
   }
-  .host-metrics {
-    grid-template-columns: 1fr 1fr;
+  .host-metric {
+    flex: 1 1 100%;
   }
 }

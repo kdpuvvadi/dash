@@ -156,27 +156,133 @@ func (c *Config) applyDefaults() {
 		if c.Hosts[i].Port == 0 {
 			c.Hosts[i].Port = 22
 		}
+		if c.Hosts[i].Category == "" {
+			c.Hosts[i].Category = "overview"
+		}
+		if c.Hosts[i].Group == "" {
+			c.Hosts[i].Group = c.Hosts[i].Name
+		}
 	}
+	c.ensureTaxonomy()
+	c.ensureLayout()
 }
 
-func (c *Config) Validate() error {
+// ensureTaxonomy derives categories/groups from host fields so app.yaml
+// only needs category/group on each host — no separate lists required.
+func (c *Config) ensureTaxonomy() {
 	catIDs := map[string]bool{}
 	for _, cat := range c.Categories {
-		if cat.ID == "" {
-			return fmt.Errorf("category missing id")
+		if cat.ID != "" {
+			catIDs[cat.ID] = true
 		}
-		catIDs[cat.ID] = true
 	}
 	groupIDs := map[string]bool{}
 	for _, g := range c.Groups {
-		if g.ID == "" {
-			return fmt.Errorf("group missing id")
-		}
-		groupIDs[g.ID] = true
-		if g.Category != "" && len(catIDs) > 0 && !catIDs[g.Category] {
-			return fmt.Errorf("group %q references unknown category %q", g.ID, g.Category)
+		if g.ID != "" {
+			groupIDs[g.ID] = true
 		}
 	}
+	for _, h := range c.Hosts {
+		if h.Category != "" && !catIDs[h.Category] {
+			c.Categories = append(c.Categories, Category{ID: h.Category, Name: humanizeID(h.Category)})
+			catIDs[h.Category] = true
+		}
+		if h.Group != "" && !groupIDs[h.Group] {
+			c.Groups = append(c.Groups, Group{ID: h.Group, Name: humanizeID(h.Group), Category: h.Category})
+			groupIDs[h.Group] = true
+		}
+	}
+	if len(c.Categories) == 0 {
+		c.Categories = []Category{{ID: "overview", Name: "Overview"}}
+	}
+}
+
+// ensureLayout adds a host+containers row for every host not already in layout.
+func (c *Config) ensureLayout() {
+	referenced := map[string]bool{}
+	hasUnknown := false
+	for _, sec := range c.Layout.Sections {
+		for _, row := range sec.Rows {
+			for _, b := range row.Blocks {
+				if b.Type == "unknown_apps" {
+					hasUnknown = true
+				}
+				if b.Ref != "" && (b.Type == "host" || b.Type == "containers" || b.Type == "guests" || b.Type == "metric") {
+					referenced[b.Ref] = true
+				}
+			}
+		}
+	}
+	if len(c.Layout.Sections) == 0 {
+		c.Layout.Sections = []Section{{
+			ID:       "overview",
+			Title:    "Your services",
+			Category: "overview",
+		}}
+	}
+	secByCat := map[string]int{}
+	for i, sec := range c.Layout.Sections {
+		cat := sec.Category
+		if cat == "" {
+			cat = "overview"
+		}
+		secByCat[cat] = i
+	}
+	for _, h := range c.Hosts {
+		if referenced[h.Name] {
+			continue
+		}
+		cat := h.Category
+		if cat == "" {
+			cat = "overview"
+		}
+		idx, ok := secByCat[cat]
+		if !ok {
+			c.Layout.Sections = append(c.Layout.Sections, Section{
+				ID:       cat,
+				Title:    humanizeID(cat),
+				Category: cat,
+			})
+			idx = len(c.Layout.Sections) - 1
+			secByCat[cat] = idx
+		}
+		row := Row{
+			Columns: 1,
+			Group:   h.Group,
+			Blocks: []Block{
+				{Type: "host", Ref: h.Name, Icon: h.Icon},
+				{Type: "containers", Ref: h.Name},
+			},
+		}
+		c.Layout.Sections[idx].Rows = append(c.Layout.Sections[idx].Rows, row)
+		referenced[h.Name] = true
+	}
+	if !hasUnknown && len(c.Layout.Sections) > 0 {
+		c.Layout.Sections[0].Rows = append(c.Layout.Sections[0].Rows, Row{
+			Columns: 1,
+			Blocks:  []Block{{Type: "unknown_apps"}},
+		})
+	}
+}
+
+func humanizeID(id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return ""
+	}
+	parts := strings.FieldsFunc(id, func(r rune) bool {
+		return r == '-' || r == '_' || r == ' '
+	})
+	for i, p := range parts {
+		if p == "" {
+			continue
+		}
+		parts[i] = strings.ToUpper(p[:1]) + strings.ToLower(p[1:])
+	}
+	return strings.Join(parts, " ")
+}
+
+func (c *Config) Validate() error {
 	hostNames := map[string]bool{}
 	for _, h := range c.Hosts {
 		if h.Name == "" {
@@ -186,20 +292,22 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("host %q needs host or local: true", h.Name)
 		}
 		hostNames[h.Name] = true
-		if h.Category != "" && len(catIDs) > 0 && !catIDs[h.Category] {
-			return fmt.Errorf("host %q references unknown category %q", h.Name, h.Category)
-		}
-		if h.Group != "" && len(groupIDs) > 0 && !groupIDs[h.Group] {
-			return fmt.Errorf("host %q references unknown group %q", h.Name, h.Group)
+	}
+	for _, cat := range c.Categories {
+		if cat.ID == "" {
+			return fmt.Errorf("category missing id")
 		}
 	}
-	for _, sec := range c.Layout.Sections {
-		for _, row := range sec.Rows {
+	for _, g := range c.Groups {
+		if g.ID == "" {
+			return fmt.Errorf("group missing id")
+		}
+	}
+	for si := range c.Layout.Sections {
+		for ri := range c.Layout.Sections[si].Rows {
+			row := &c.Layout.Sections[si].Rows[ri]
 			if row.Columns <= 0 {
-				return fmt.Errorf("layout row in section %q needs columns > 0", sec.ID)
-			}
-			if row.Group != "" && len(groupIDs) > 0 && !groupIDs[row.Group] {
-				return fmt.Errorf("layout row references unknown group %q", row.Group)
+				row.Columns = 1
 			}
 			for _, b := range row.Blocks {
 				if b.Type == "" {
@@ -281,33 +389,8 @@ alerts:
   disk_percent: 90
   mem_percent: 95
 
-# Top-level buckets shown as tabs on the board.
-categories:
-  - id: overview
-    name: Overview
-
-groups:
-  - id: local
-    name: This machine
-    category: overview
-
-# Screen layout: each row sets how many columns; blocks fill left to right.
-layout:
-  sections:
-    - id: overview
-      title: Your services
-      category: overview
-      rows:
-        - columns: 3
-          group: local
-          blocks:
-            - type: host
-              ref: local
-            - type: containers
-              ref: local
-            - type: unknown_apps
-
-# Machines to watch. Add more blocks under hosts: as needed.
+# Machines to watch. category/group on the host are enough —
+# tabs and sections are derived automatically. Layout is optional.
 hosts:
   - name: local
     # Watch the Docker host this container runs on.
