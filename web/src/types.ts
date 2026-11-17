@@ -52,10 +52,11 @@ export type HostSnap = {
 export type Guest = {
   id: string;
   name: string;
-  type: string;
+  type: string; // qemu | lxc
   status: string;
   cpu_pct: number;
   mem_pct: number;
+  max_mem?: number;
 };
 
 export type Container = {

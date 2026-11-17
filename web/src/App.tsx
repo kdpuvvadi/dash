@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { connectWS, fetchLayout, formatBytes, formatRate, iconUrl, timeNow } from "./api";
 import Sparkline from "./Sparkline";
-import type { AppSnap, Container, HostSnap, LayoutPayload, Snapshot } from "./types";
+import type { AppSnap, Container, Guest, HostSnap, LayoutPayload, Snapshot } from "./types";
 
 const ACCENTS = ["#fb923c", "#38bdf8", "#a78bfa", "#f472b6", "#2dd4bf", "#fbbf24", "#3dd68c"];
 
 type Hist = Record<string, { t: string; v: number }[]>;
 
 type Page = "overview" | "hosts";
-type ServiceKind = "container" | "app";
+type ServiceKind = "container" | "app" | "lxc" | "vm";
 type TypeFilter = "all" | ServiceKind;
 type HealthFilter =
   | "all"
@@ -151,6 +151,10 @@ function buildServices(snap: Snapshot, history: Hist, category: string): Service
   let i = 0;
 
   for (const h of filtered) {
+    for (const g of h.guests || []) {
+      const accentG = ACCENTS[i++ % ACCENTS.length];
+      cards.push(guestCard(g, h, accentG, history));
+    }
     for (const c of h.containers || []) {
       const accentC = ACCENTS[i++ % ACCENTS.length];
       cards.push(containerCard(c, h, accentC, history));
@@ -174,6 +178,28 @@ function hostList(snap: Snapshot, category: string): HostSnap[] {
   const hosts = Object.values(snap.hosts || {});
   if (!category) return hosts;
   return hosts.filter((h) => !h.category || h.category === category);
+}
+
+function guestCard(g: Guest, host: HostSnap, accent: string, history: Hist): ServiceCard {
+  const kind: ServiceKind = g.type === "lxc" ? "lxc" : "vm";
+  const running = /running/i.test(g.status);
+  const typeLabel = kind === "lxc" ? "LXC" : "VM";
+  return {
+    key: `guest:${host.name}:${g.type}:${g.id}`,
+    kind,
+    title: g.name,
+    sub: `${typeLabel} ${g.id} · ${host.name}`,
+    icon: kind === "lxc" ? "linux" : "proxmox",
+    url: hostUrl(host),
+    online: running,
+    statusKey: running ? "running" : "stopped",
+    statusLabel: running ? "Running" : "Stopped",
+    metricLabel: running ? "CPU" : "Status",
+    metricValue: running ? `${(g.cpu_pct || 0).toFixed(0)}%` : "Stopped",
+    spark: history[`${host.name}:cpu`] || [],
+    accent,
+    tint: hexAlpha(accent, 0.08),
+  };
 }
 
 function containerCard(c: Container, host: HostSnap, accent: string, history: Hist): ServiceCard {
@@ -272,12 +298,28 @@ export default function App() {
     return buildServices(snap, history, category);
   }, [snap, history, category]);
 
+  const typeOptions = useMemo(() => {
+    const kinds = new Set(allServices.map((s) => s.kind));
+    const opts: { value: TypeFilter; label: string }[] = [{ value: "all", label: "All types" }];
+    if (kinds.has("container")) opts.push({ value: "container", label: "Containers" });
+    if (kinds.has("lxc")) opts.push({ value: "lxc", label: "LXCs" });
+    if (kinds.has("vm")) opts.push({ value: "vm", label: "VMs" });
+    if (kinds.has("app")) opts.push({ value: "app", label: "Apps" });
+    return opts;
+  }, [allServices]);
+
   const services = useMemo(() => {
     return allServices.filter((s) => {
       if (typeFilter !== "all" && s.kind !== typeFilter) return false;
       return matchesHealthFilter(s, healthFilter);
     });
   }, [allServices, typeFilter, healthFilter]);
+
+  useEffect(() => {
+    if (typeFilter !== "all" && !typeOptions.some((o) => o.value === typeFilter)) {
+      setTypeFilter("all");
+    }
+  }, [typeFilter, typeOptions]);
 
   if (!layout || !snap) {
     return (
@@ -396,9 +438,11 @@ export default function App() {
                       value={typeFilter}
                       onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
                     >
-                      <option value="all">All types</option>
-                      <option value="container">Containers</option>
-                      <option value="app">Apps</option>
+                      {typeOptions.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
                     </select>
                   </label>
                   <label className="filter-field">
