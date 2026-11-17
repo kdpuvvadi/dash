@@ -95,22 +95,26 @@ type Container struct {
 	AppID    string  `json:"app_id,omitempty"`
 	AppName  string  `json:"app_name,omitempty"`
 	Icon     string  `json:"icon,omitempty"`
-	Known    bool    `json:"known"`
+	Known       bool              `json:"known"`
+	Configured  bool              `json:"configured,omitempty"` // listed under host services in app.yaml
+	URL         string            `json:"url,omitempty"`
+	Fields      map[string]string `json:"fields,omitempty"` // service metrics linked onto this container
 }
 
 type AppSnap struct {
-	ID       string            `json:"id"`
-	Type     string            `json:"type"`
-	Name     string            `json:"name"`
-	HostRef  string            `json:"host_ref"`
-	URL      string            `json:"url"`
-	Icon     string            `json:"icon"`
-	Online   bool              `json:"online"`
-	NeedsKey bool              `json:"needs_key"`
-	Fields   map[string]string `json:"fields"`
-	Error    string            `json:"error,omitempty"`
-	Category string            `json:"category"`
-	Group    string            `json:"group"`
+	ID          string            `json:"id"`
+	Type        string            `json:"type"`
+	Name        string            `json:"name"`
+	HostRef     string            `json:"host_ref"`
+	URL         string            `json:"url"`
+	Icon        string            `json:"icon"`
+	Online      bool              `json:"online"`
+	NeedsKey    bool              `json:"needs_key"`
+	Configured  bool              `json:"configured,omitempty"` // listed under host services in app.yaml
+	Fields      map[string]string `json:"fields"`
+	Error       string            `json:"error,omitempty"`
+	Category    string            `json:"category"`
+	Group       string            `json:"group"`
 }
 
 type UnknownApp struct {

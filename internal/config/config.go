@@ -79,18 +79,30 @@ type Host struct {
 	Category     string   `yaml:"category"`
 	Group        string   `yaml:"group"`
 	Tags         []string `yaml:"tags"`
-	Apps         []AppRef `yaml:"apps"`
+	// Services (preferred) and Apps (alias) list API-backed services on this host.
+	// Link a service to a container with container: <name> so metrics enrich that card.
+	Services []AppRef `yaml:"services"`
+	Apps     []AppRef `yaml:"apps"`
 }
 
 type AppRef struct {
-	Type     string `yaml:"type"`
-	URL      string `yaml:"url"`
-	Key      string `yaml:"key"`
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
-	Category string `yaml:"category"`
-	Group    string `yaml:"group"`
-	Icon     string `yaml:"icon"`
+	Type      string `yaml:"type"`
+	URL       string `yaml:"url"`
+	Key       string `yaml:"key"`
+	Username  string `yaml:"username"`
+	Password  string `yaml:"password"`
+	Category  string `yaml:"category"`
+	Group     string `yaml:"group"`
+	Icon      string `yaml:"icon"`
+	Container string `yaml:"container"` // optional Docker container name to enrich
+}
+
+// ServiceRefs returns services + apps (apps kept for backward compatibility).
+func (h Host) ServiceRefs() []AppRef {
+	out := make([]AppRef, 0, len(h.Services)+len(h.Apps))
+	out = append(out, h.Services...)
+	out = append(out, h.Apps...)
+	return out
 }
 
 func DefaultConfigDir() string {
@@ -404,8 +416,9 @@ hosts:
 }
 
 func secretsExample() string {
-	return `# Optional API keys. Dash matches apps itself; put keys here by app id.
-# Rename to secrets.yaml (or copy) and fill in. Do not commit real keys.
+	return `# Optional API keys by service id. Copy to secrets.yaml (do not commit real keys).
+# Values may use ${ENV_VAR} — dash expands them from the process environment
+# (compose env_file: .env on the LXC).
 #
 # homeassistant:
 #   key: "your-long-lived-token"
@@ -413,5 +426,8 @@ func secretsExample() string {
 #   key: "your-api-password"
 # jellyfin:
 #   key: "your-api-key"
+# adguardhome:
+#   username: ${ADGUARD_USERNAME}
+#   password: ${ADGUARD_PASSWORD}
 `
 }

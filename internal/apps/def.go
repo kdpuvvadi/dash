@@ -153,7 +153,10 @@ func (d *Def) Matches(image, name string, ports []int) bool {
 			return true
 		}
 	}
-	if len(d.Match.Ports) > 0 {
+	// Port-only matching is too noisy when image/name patterns exist
+	// (e.g. AdGuard on :80 was matching Pi-hole). Use ports alone only
+	// when the def has no image or name hints.
+	if len(d.Match.DockerImage) == 0 && len(d.Match.DockerName) == 0 && len(d.Match.Ports) > 0 {
 		set := map[int]bool{}
 		for _, p := range ports {
 			set[p] = true

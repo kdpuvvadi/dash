@@ -1,0 +1,40 @@
+id: adguardhome
+name: AdGuard Home
+credentials:
+  - name: username
+    label: Username
+    required: true
+  - name: password
+    label: Password
+    required: true
+match:
+  docker_image:
+    - adguard/adguardhome
+    - adguardhome
+  docker_name:
+    - adguard
+    - adguardhome
+  ports: [80, 3000, 443]
+auth:
+  type: basic
+probe:
+  method: GET
+  path: /control/status
+  ok_status: [200]
+collect:
+  - id: queries
+    label: Queries
+    method: GET
+    path: /control/stats
+    parse: jsonpath
+    value: "$.num_dns_queries"
+  - id: blocked
+    label: Blocked
+    method: GET
+    path: /control/stats
+    parse: jsonpath
+    value: "$.num_blocked_filtering"
+ui:
+  icon: adguard-home
+  fields: [blocked_pct, queries]
+  accent: "#68b984"

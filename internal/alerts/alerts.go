@@ -48,9 +48,9 @@ func (c *Checker) Evaluate(snap store.Snapshot) []store.AlertEvent {
 			c.notify(ev)
 		}
 	}
-	// HTTP uptime for configured app URLs
+	// HTTP uptime for configured service URLs
 	for _, h := range cfg.Hosts {
-		for _, app := range h.Apps {
+		for _, app := range h.ServiceRefs() {
 			if app.URL == "" {
 				continue
 			}

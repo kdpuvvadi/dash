@@ -9,6 +9,9 @@ services:
       - SYS_ADMIN
       - SYS_PTRACE
     network_mode: host
+    # Pass host .env into the process so config/secrets can use ${VAR} expansion.
+    env_file:
+      - .env
     volumes:
       - ./config:/config
       - /var/run/docker.sock:/var/run/docker.sock:ro

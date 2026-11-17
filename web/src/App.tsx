@@ -7,15 +7,44 @@ const ACCENTS = ["#fb923c", "#38bdf8", "#a78bfa", "#f472b6", "#2dd4bf", "#fbbf24
 
 type Hist = Record<string, { t: string; v: number }[]>;
 
-type Page = "overview" | "hosts";
+type Page = "home" | "overview" | "hosts";
 type ServiceKind = "container" | "app" | "lxc" | "vm";
-/** UI tabs: Apps = Docker containers (+ catalog apps). */
-type TypeFilter = "all" | "apps" | "lxc" | "vm";
+/** Overview tabs: Apps = Docker containers; Services = API-backed (unlinked) apps. */
+type TypeFilter = "all" | "apps" | "services" | "lxc" | "vm";
 
 function matchesTypeFilter(kind: ServiceKind, filter: TypeFilter) {
   if (filter === "all") return true;
-  if (filter === "apps") return kind === "container" || kind === "app";
+  if (filter === "apps") return kind === "container";
+  if (filter === "services") return kind === "app";
   return kind === filter;
+}
+
+function formatQueryCount(raw: string): string {
+  const n = Number(String(raw).replace(/,/g, ""));
+  if (!Number.isFinite(n)) return raw;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(Math.round(n));
+}
+
+/** Prefer service metrics linked onto a container (e.g. AdGuard blocked %). */
+function containerServiceMetric(c: Container): { label: string; value: string } | null {
+  const fields = c.fields;
+  if (!fields || !Object.keys(fields).length) return null;
+  if (c.app_id === "adguardhome" || fields.blocked_pct || fields.queries) {
+    const pct = fields.blocked_pct;
+    const q = fields.queries;
+    if (pct && q) return { label: "Blocked", value: `${pct} · ${formatQueryCount(q)}` };
+    if (pct) return { label: "Blocked", value: pct };
+    if (q) return { label: "Queries", value: formatQueryCount(q) };
+  }
+  if (fields.blocked_pct) return { label: "Blocked", value: fields.blocked_pct };
+  const preferred = ["blocked", "ads_percentage", "queries", "status"];
+  for (const key of preferred) {
+    if (fields[key]) return { label: key.replace(/_/g, " "), value: fields[key] };
+  }
+  const [k, v] = Object.entries(fields)[0];
+  return { label: k.replace(/_/g, " "), value: v };
 }
 type HealthFilter =
   | "all"
@@ -149,6 +178,36 @@ function hexAlpha(hex: string, a: number) {
   return `rgba(${r},${g},${b},${a})`;
 }
 
+/** Home: only services explicitly listed under host `services:` / `apps:` in config. */
+function buildConfiguredServices(snap: Snapshot, history: Hist, category: string): ServiceCard[] {
+  const hosts = Object.values(snap.hosts || {});
+  const filtered = category
+    ? hosts.filter((h) => !h.category || h.category === category)
+    : hosts;
+  const cards: ServiceCard[] = [];
+  let i = 0;
+
+  for (const h of filtered) {
+    for (const c of h.containers || []) {
+      if (!c.configured) continue;
+      cards.push(containerCard(c, h, ACCENTS[i++ % ACCENTS.length], history));
+    }
+  }
+
+  for (const app of Object.values(snap.apps || {})) {
+    if (!app.configured) continue;
+    if (category && app.category && app.category !== category) continue;
+    const dup = cards.some(
+      (c) => c.title.toLowerCase() === (app.name || "").toLowerCase() || c.key.includes(app.id)
+    );
+    if (dup) continue;
+    cards.push(appCard(app, ACCENTS[i++ % ACCENTS.length]));
+  }
+
+  return cards;
+}
+
+/** Overview: all detected guests, containers, and collected apps. */
 function buildServices(snap: Snapshot, history: Hist, category: string): ServiceCard[] {
   const hosts = Object.values(snap.hosts || {});
   const filtered = category
@@ -213,22 +272,37 @@ function containerCard(c: Container, host: HostSnap, accent: string, history: Hi
   const st = parseClientStatus(c.status, c.state, c.health, c.label);
   const mem = c.mem_usage ? c.mem_usage.split(" / ")[0] : "";
   const showResource = st.online && (c.cpu_pct > 0 || !!mem);
+  const serviceMetric = containerServiceMetric(c);
+  let url = c.url || hostUrl(host);
+  try {
+    if (c.url) url = new URL(c.url).host;
+  } catch {
+    /* keep raw */
+  }
   return {
     key: `ct:${host.name}:${c.id}`,
     kind: "container",
     title: c.app_name || c.name,
-    sub: c.app_name && c.app_name !== c.name ? c.name : host.name,
+    sub: c.app_name && c.app_name !== c.name ? `${c.name} · ${host.name}` : host.name,
     icon: c.icon || "docker",
-    url: hostUrl(host),
+    url,
     online: st.online,
     statusKey: st.statusKey,
     statusLabel: st.statusLabel,
-    metricLabel: showResource ? (c.cpu_pct > 0 ? "CPU" : "Memory") : "Status",
-    metricValue: showResource
-      ? c.cpu_pct > 0
-        ? `${c.cpu_pct.toFixed(0)}%`
-        : mem
-      : st.statusLabel,
+    metricLabel: serviceMetric
+      ? serviceMetric.label
+      : showResource
+        ? c.cpu_pct > 0
+          ? "CPU"
+          : "Memory"
+        : "Status",
+    metricValue: serviceMetric
+      ? serviceMetric.value
+      : showResource
+        ? c.cpu_pct > 0
+          ? `${c.cpu_pct.toFixed(0)}%`
+          : mem
+        : st.statusLabel,
     spark: history[`${host.name}:cpu`] || [],
     accent,
     tint: hexAlpha(accent, 0.08),
@@ -267,7 +341,7 @@ export default function App() {
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [history, setHistory] = useState<Hist>({});
   const [connected, setConnected] = useState(false);
-  const [page, setPage] = useState<Page>("overview");
+  const [page, setPage] = useState<Page>("home");
   const [category, setCategory] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [healthFilter, setHealthFilter] = useState<HealthFilter>("all");
@@ -300,6 +374,11 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
 
+  const homeServices = useMemo(() => {
+    if (!snap) return [];
+    return buildConfiguredServices(snap, history, category);
+  }, [snap, history, category]);
+
   const allServices = useMemo(() => {
     if (!snap) return [];
     return buildServices(snap, history, category);
@@ -312,19 +391,25 @@ export default function App() {
     const tabs: { value: TypeFilter; label: string; count: number }[] = [
       { value: "all", label: "All", count: allServices.length },
     ];
-    const appsCount = count((k) => k === "container" || k === "app");
+    const appsCount = count((k) => k === "container");
+    const servicesCount = count((k) => k === "app");
     if (appsCount > 0) tabs.push({ value: "apps", label: "Apps", count: appsCount });
+    if (servicesCount > 0) tabs.push({ value: "services", label: "Services", count: servicesCount });
     if (kinds.has("lxc")) tabs.push({ value: "lxc", label: "LXCs", count: count((k) => k === "lxc") });
     if (kinds.has("vm")) tabs.push({ value: "vm", label: "VMs", count: count((k) => k === "vm") });
     return tabs;
   }, [allServices]);
 
-  const services = useMemo(() => {
+  const overviewServices = useMemo(() => {
     return allServices.filter((s) => {
       if (!matchesTypeFilter(s.kind, typeFilter)) return false;
       return matchesHealthFilter(s, healthFilter);
     });
   }, [allServices, typeFilter, healthFilter]);
+
+  const homeFiltered = useMemo(() => {
+    return homeServices.filter((s) => matchesHealthFilter(s, healthFilter));
+  }, [homeServices, healthFilter]);
 
   useEffect(() => {
     if (typeFilter !== "all" && !typeTabs.some((t) => t.value === typeFilter)) {
@@ -345,7 +430,9 @@ export default function App() {
   const total = summary?.services_total ?? 0;
   const statusText = summary?.status || "All systems operational";
   const allOk = /operational/i.test(statusText);
-  const countLabel = String(services.length).padStart(2, "0");
+  const homeOnline = homeFiltered.filter((s) => s.online).length;
+  const homeCountLabel = String(homeFiltered.length).padStart(2, "0");
+  const overviewCountLabel = String(overviewServices.length).padStart(2, "0");
   const hosts = hostList(snap, category);
   const hostsOnline = hosts.filter((h) => h.online).length;
 
@@ -361,6 +448,13 @@ export default function App() {
           <span>{layout.brand?.name || "homelab"}</span>
         </div>
         <nav className="nav">
+          <button
+            className={page === "home" ? "active" : ""}
+            onClick={() => setPage("home")}
+            type="button"
+          >
+            Home
+          </button>
           <button
             className={page === "overview" ? "active" : ""}
             onClick={() => setPage("overview")}
@@ -380,9 +474,9 @@ export default function App() {
             .map((c) => (
               <button
                 key={c.id}
-                className={page === "overview" && category === c.id ? "active" : ""}
+                className={(page === "home" || page === "overview") && category === c.id ? "active" : ""}
                 onClick={() => {
-                  setPage("overview");
+                  setPage("home");
                   setCategory(c.id);
                 }}
                 type="button"
@@ -397,12 +491,12 @@ export default function App() {
         </div>
       </header>
 
-      {page === "overview" ? (
+      {page === "home" ? (
         <>
           <section className="hero">
             <div className="hero-copy">
               <h1>{layout.brand?.tagline || "A little lab. A lot of possibility."}</h1>
-              <p className="hero-sub">All your apps, right where they belong.</p>
+              <p className="hero-sub">Services you added in config.</p>
             </div>
             <div className="local-time">
               <div className="label">LOCAL TIME</div>
@@ -421,7 +515,7 @@ export default function App() {
             <div className="summary-item">
               <div className="k">Services</div>
               <div className="v">
-                {online} / {total} online
+                {homeOnline} / {homeFiltered.length} online
               </div>
             </div>
             <div className="summary-item">
@@ -439,7 +533,63 @@ export default function App() {
           <section className="services">
             <div className="section-head">
               <h2>
-                Your services <span className="count">{countLabel}</span>
+                Your services <span className="count">{homeCountLabel}</span>
+              </h2>
+              <div className="section-tools">
+                <label className="filter-field">
+                  <span>Health</span>
+                  <select
+                    value={healthFilter}
+                    onChange={(e) => setHealthFilter(e.target.value as HealthFilter)}
+                  >
+                    <option value="all">All status</option>
+                    <option value="online">Online</option>
+                    <option value="offline">Offline</option>
+                    <option value="running">Running</option>
+                    <option value="healthy">Healthy</option>
+                    <option value="unhealthy">Unhealthy</option>
+                    <option value="starting">Starting</option>
+                    <option value="restarting">Restarting</option>
+                    <option value="paused">Paused</option>
+                    <option value="stopped">Stopped</option>
+                  </select>
+                </label>
+                <div className="range">Live · every {layout.poll_seconds || 5}s</div>
+              </div>
+            </div>
+
+            {homeFiltered.length === 0 ? (
+              <p className="empty-filter">
+                No services added yet. List them under a host&apos;s <code>services:</code> in app.yaml.
+              </p>
+            ) : (
+              <div className="service-grid">
+                {homeFiltered.map((s) => (
+                  <ServiceTile key={s.key} card={s} />
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      ) : page === "overview" ? (
+        <>
+          <section className="hero hero-compact">
+            <div className="hero-copy">
+              <h1>Overview</h1>
+              <p className="hero-sub">
+                Detected containers, LXCs, and VMs across the lab · {online}/{total} online
+              </p>
+            </div>
+            <div className="local-time">
+              <div className="label">LOCAL TIME</div>
+              <div className="value">{clock}</div>
+            </div>
+          </section>
+
+          <section className="services">
+            <div className="section-head">
+              <h2>
+                Everything <span className="count">{overviewCountLabel}</span>
               </h2>
               <div className="section-tools">
                 <label className="filter-field">
@@ -480,11 +630,11 @@ export default function App() {
               ))}
             </div>
 
-            {services.length === 0 ? (
+            {overviewServices.length === 0 ? (
               <p className="empty-filter">No services match these filters.</p>
             ) : (
               <div className="service-grid">
-                {services.map((s) => (
+                {overviewServices.map((s) => (
                   <ServiceTile key={s.key} card={s} />
                 ))}
               </div>

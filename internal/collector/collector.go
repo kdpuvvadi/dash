@@ -103,20 +103,27 @@ func (c *Collector) CollectOnce() {
 			_ = c.store.Record(h.Name, "net_tx", hs.NetTxBps, now)
 		}
 
-		// Explicit apps in app.yaml (optional overrides)
+		// Enrich containers with catalog / bundled def icons first.
+		for i := range hs.Containers {
+			enrichContainer(&hs.Containers[i], defs)
+		}
+
+		// Explicit services/apps in app.yaml — optionally link metrics onto a container.
 		explicit := map[string]bool{}
-		for _, app := range h.Apps {
+		linkedContainers := map[int]bool{}
+		for _, app := range h.ServiceRefs() {
 			explicit[app.Type] = true
 			def := defs[app.Type]
 			key := h.Name + ":" + app.Type
 			as := &store.AppSnap{
-				ID:       key,
-				Type:     app.Type,
-				HostRef:  h.Name,
-				URL:      app.URL,
-				Category: app.Category,
-				Group:    app.Group,
-				Fields:   map[string]string{},
+				ID:          key,
+				Type:        app.Type,
+				HostRef:     h.Name,
+				URL:         app.URL,
+				Category:    app.Category,
+				Group:       app.Group,
+				Configured:  true,
+				Fields:      map[string]string{},
 			}
 			if as.Category == "" {
 				as.Category = h.Category
@@ -125,7 +132,7 @@ func (c *Collector) CollectOnce() {
 				as.Group = h.Group
 			}
 			if def == nil {
-				as.Error = "unknown app type — request a built-in or drop a custom def in apps.d"
+				as.Error = "unknown service type — request a built-in or drop a custom def in apps.d"
 				as.Name = app.Type
 				snap.Apps[key] = as
 				continue
@@ -141,15 +148,35 @@ func (c *Collector) CollectOnce() {
 			res := def.CollectMetrics(app.URL, creds)
 			as.Online = res.Online
 			as.NeedsKey = res.NeedsKey
-			as.Fields = res.Fields
+			as.Fields = deriveServiceFields(def.ID, res.Fields)
 			as.Error = res.Error
+
+			// Link to a container on this host when configured (or auto-matched).
+			idx := findLinkedContainer(hs.Containers, app.Container, def)
+			if idx >= 0 {
+				ct := &hs.Containers[idx]
+				ct.AppID = def.ID
+				ct.AppName = def.Name
+				if as.Icon != "" {
+					ct.Icon = as.Icon
+				}
+				ct.Known = true
+				ct.Configured = true
+				ct.URL = app.URL
+				ct.Fields = as.Fields
+				linkedContainers[idx] = true
+				// Metrics live on the container card — skip a separate Services card.
+				continue
+			}
 			snap.Apps[key] = as
 		}
 
-		// Enrich containers + match defs / popular catalog for icons.
+		// Auto-match remaining containers to defs (icons already set; collect only if unlinked).
 		for i := range hs.Containers {
 			ct := &hs.Containers[i]
-			enrichContainer(ct, defs)
+			if linkedContainers[i] {
+				continue
+			}
 
 			matchedDef := false
 			for _, def := range defs {
@@ -190,12 +217,19 @@ func (c *Collector) CollectOnce() {
 				res := def.CollectMetrics(url, creds)
 				as.Online = res.Online
 				as.NeedsKey = res.NeedsKey
-				as.Fields = res.Fields
+				as.Fields = deriveServiceFields(def.ID, res.Fields)
 				as.Error = res.Error
 				if as.NeedsKey {
 					as.Error = "needs API key — add it under " + def.ID + " in config/secrets.yaml"
 				}
-				snap.Apps[key] = as
+				// Prefer enriching the container; keep a Services card only when setup is incomplete.
+				ct.URL = url
+				if len(as.Fields) > 0 {
+					ct.Fields = as.Fields
+				}
+				if as.NeedsKey || (as.Error != "" && !as.Online) {
+					snap.Apps[key] = as
+				}
 				break
 			}
 			if !matchedDef && !ct.Known && strings.Contains(strings.ToLower(ct.Status), "up") {
@@ -417,6 +451,54 @@ func enrichContainer(ct *store.Container, defs map[string]*apps.Def) {
 		ct.Icon = "docker"
 	}
 	ct.Known = m.Known
+}
+
+// findLinkedContainer returns the index of a container to attach service metrics to.
+// Prefers an explicit container: name from config; otherwise matches the service def.
+func findLinkedContainer(cts []store.Container, ref string, def *apps.Def) int {
+	if ref != "" {
+		want := strings.ToLower(strings.TrimSpace(ref))
+		for i := range cts {
+			name := strings.ToLower(cts[i].Name)
+			if name == want || strings.Contains(name, want) {
+				return i
+			}
+		}
+	}
+	if def != nil {
+		for i := range cts {
+			if def.Matches(cts[i].Image, cts[i].Name, cts[i].Ports) {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+func deriveServiceFields(defID string, fields map[string]string) map[string]string {
+	if fields == nil {
+		return map[string]string{}
+	}
+	out := map[string]string{}
+	for k, v := range fields {
+		out[k] = v
+	}
+	switch defID {
+	case "adguardhome":
+		q := parseFloatField(out["queries"])
+		b := parseFloatField(out["blocked"])
+		if q > 0 && b >= 0 {
+			out["blocked_pct"] = fmt.Sprintf("%.1f%%", b/q*100)
+		}
+	}
+	return out
+}
+
+func parseFloatField(s string) float64 {
+	s = strings.TrimSpace(strings.TrimSuffix(s, "%"))
+	var f float64
+	_, _ = fmt.Sscanf(s, "%f", &f)
+	return f
 }
 
 func mergeCreds(base map[string]string, overlay apps.Creds) apps.Creds {

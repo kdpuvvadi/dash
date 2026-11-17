@@ -75,6 +75,9 @@ export type Container = {
   app_name?: string;
   icon?: string;
   known?: boolean;
+  configured?: boolean;
+  url?: string;
+  fields?: Record<string, string>;
 };
 
 export type AppSnap = {
@@ -86,6 +89,7 @@ export type AppSnap = {
   icon?: string;
   online: boolean;
   needs_key: boolean;
+  configured?: boolean;
   fields: Record<string, string>;
   error?: string;
   category?: string;
