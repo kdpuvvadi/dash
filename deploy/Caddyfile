@@ -1,7 +1,17 @@
-# Kept for reference. Server uses ~/dash/Caddyfile next to compose.yaml.
+# Kept in sync with root Caddyfile (server copies Caddyfile next to compose.yaml).
 {
 	email {$CADDY_EMAIL}
-	acme_dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	acme_dns cloudflare {
+		api_token {env.CLOUDFLARE_API_TOKEN}
+	}
+}
+
+puvvadi.net {
+	respond "ok" 200
+}
+
+dns.puvvadi.net {
+	respond "ok" 200
 }
 
 dash.dns.puvvadi.net {

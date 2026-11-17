@@ -5,6 +5,17 @@
 	}
 }
 
-dash.dns.puvvadi.net {
+# 1) Apex first — Cloudflare zone is puvvadi.net (this cert already works).
+puvvadi.net {
+	respond "ok" 200
+}
+
+# 2) Then dns.puvvadi.net (needs zone puvvadi.net discovery or a CF zone for dns.puvvadi.net).
+dns.puvvadi.net {
+	respond "ok" 200
+}
+
+# 3) App hostname — also reachable as dash.puvvadi.net while nested DNS name finishes ACME.
+dash.puvvadi.net, dash.dns.puvvadi.net {
 	reverse_proxy dash:8080
 }
