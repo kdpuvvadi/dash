@@ -1,13 +1,41 @@
 import { useEffect, useMemo, useState } from "react";
-import { connectWS, fetchLayout, formatBytes, iconUrl, timeNow } from "./api";
+import { connectWS, fetchLayout, formatBytes, formatRate, iconUrl, timeNow } from "./api";
 import Sparkline from "./Sparkline";
 import type { Block, HostSnap, LayoutPayload, Snapshot } from "./types";
 
 const ACCENTS = ["#fb923c", "#38bdf8", "#a78bfa", "#f472b6", "#2dd4bf", "#fbbf24", "#3dd68c"];
 
+type Hist = Record<string, { t: string; v: number }[]>;
+
+function pushLiveHistory(prev: Hist, snap: Snapshot): Hist {
+  const next: Hist = { ...prev };
+  const t = snap.updated_at || new Date().toISOString();
+  for (const h of Object.values(snap.hosts || {})) {
+    const samples: [string, number][] = [
+      ["cpu", h.cpu_pct || 0],
+      ["mem", h.mem_pct || 0],
+      ["disk", h.disk_pct || 0],
+      ["net_rx", h.net_rx_bps || 0],
+      ["net_tx", h.net_tx_bps || 0],
+    ];
+    for (const [metric, v] of samples) {
+      const key = `${h.name}:${metric}`;
+      const arr = [...(next[key] || [])];
+      const last = arr[arr.length - 1];
+      if (!last || last.t !== t) {
+        arr.push({ t, v });
+        if (arr.length > 120) arr.shift();
+        next[key] = arr;
+      }
+    }
+  }
+  return next;
+}
+
 export default function App() {
   const [layout, setLayout] = useState<LayoutPayload | null>(null);
   const [snap, setSnap] = useState<Snapshot | null>(null);
+  const [history, setHistory] = useState<Hist>({});
   const [connected, setConnected] = useState(false);
   const [category, setCategory] = useState<string>("");
   const [clock, setClock] = useState(timeNow());
@@ -17,6 +45,7 @@ export default function App() {
       .then((data) => {
         setLayout(data);
         setSnap(data.snapshot);
+        setHistory(data.history || {});
         const first = data.categories?.[0]?.id || "";
         setCategory(first);
       })
@@ -25,7 +54,10 @@ export default function App() {
 
   useEffect(() => {
     return connectWS(
-      (s) => setSnap(s),
+      (s) => {
+        setSnap(s);
+        setHistory((prev) => pushLiveHistory(prev, s));
+      },
       (ok) => setConnected(ok)
     );
   }, []);
@@ -93,26 +125,28 @@ export default function App() {
 
       <section className="summary">
         <div className="summary-item">
-          <div className="k">System Status</div>
+          <div className="k">CPU</div>
+          <div className="v">{(summary?.cpu_pct ?? 0).toFixed(0)}%</div>
+        </div>
+        <div className="summary-item">
+          <div className="k">Memory</div>
           <div className="v">
-            <span className="dot" />
-            {summary?.status || "—"}
+            {summary?.mem_used || "—"} / {summary?.mem_total || "—"}
+            <span className="summary-pct">{(summary?.mem_pct ?? 0).toFixed(0)}%</span>
           </div>
         </div>
         <div className="summary-item">
-          <div className="k">Services</div>
-          <div className="v">
-            {summary?.services_online ?? 0} / {summary?.services_total ?? 0} online
+          <div className="k">Network</div>
+          <div className="v net-v">
+            <span>↓ {summary?.net_rx_human || formatRate(summary?.net_rx_bps)}</span>
+            <span>↑ {summary?.net_tx_human || formatRate(summary?.net_tx_bps)}</span>
           </div>
-        </div>
-        <div className="summary-item">
-          <div className="k">Uptime</div>
-          <div className="v">{summary?.uptime_human || "—"}</div>
         </div>
         <div className="summary-item">
           <div className="k">Storage</div>
           <div className="v">
             {summary?.storage_used || "—"} / {summary?.storage_total || "—"}
+            <span className="summary-pct">{(summary?.storage_pct ?? 0).toFixed(0)}%</span>
           </div>
         </div>
       </section>
@@ -121,7 +155,7 @@ export default function App() {
         <section key={sec.id}>
           <div className="section-head">
             <h2>{sec.title || "Your services"}</h2>
-            <div className="range">Last {layout.poll_seconds ? "24 hours" : "24 hours"}</div>
+            <div className="range">Live · every {layout.poll_seconds || 5}s</div>
           </div>
           {sec.rows?.map((row, idx) => (
             <div key={idx}>
@@ -135,7 +169,7 @@ export default function App() {
                     key={i}
                     block={b}
                     snap={snap}
-                    history={layout.history || {}}
+                    history={history}
                     accent={ACCENTS[i % ACCENTS.length]}
                     requestUrl={layout.app_request_url}
                     repoUrl={layout.repo_url}
@@ -148,7 +182,10 @@ export default function App() {
       ))}
 
       <footer className="footer">
-        <span>Private by design. Powered by you.</span>
+        <span>
+          {summary?.status || "—"} · {summary?.services_online ?? 0}/{summary?.services_total ?? 0} online · up{" "}
+          {summary?.uptime_human || "—"}
+        </span>
         <span>
           Live via socket • Updated{" "}
           {snap.updated_at ? new Date(snap.updated_at).toLocaleTimeString() : "—"}
@@ -168,7 +205,7 @@ function BlockCard({
 }: {
   block: Block;
   snap: Snapshot;
-  history: Record<string, { t: string; v: number }[]>;
+  history: Hist;
   accent: string;
   requestUrl: string;
   repoUrl: string;
@@ -226,7 +263,15 @@ function BlockCard({
         ? `${(h?.mem_pct || 0).toFixed(0)}%`
         : field === "disk"
           ? `${(h?.disk_pct || 0).toFixed(0)}%`
-          : `${(h?.cpu_pct || 0).toFixed(0)}%`;
+          : field === "net" || field === "net_rx"
+            ? formatRate(h?.net_rx_bps)
+            : `${(h?.cpu_pct || 0).toFixed(0)}%`;
+    const histKey =
+      field === "mem" || field === "disk" || field === "net_rx" || field === "net_tx"
+        ? `${h?.name}:${field}`
+        : field === "net"
+          ? `${h?.name}:net_rx`
+          : `${h?.name}:cpu`;
     return (
       <GenericCard
         title={h?.name || block.ref || ""}
@@ -236,7 +281,7 @@ function BlockCard({
         metricLabel={field}
         metricValue={value}
         accent={accent}
-        spark={history[`${h?.name}:${field === "cpu" ? "cpu" : field}`] || history[`${h?.name}:cpu`] || []}
+        spark={history[histKey] || []}
       />
     );
   }
@@ -284,7 +329,7 @@ function HostCard({
 }: {
   host?: HostSnap;
   accent: string;
-  history: Record<string, { t: string; v: number }[]>;
+  history: Hist;
   icon?: string;
 }) {
   if (!host) {
@@ -295,23 +340,54 @@ function HostCard({
       </div>
     );
   }
-  const metricLabel = host.role === "proxmox" ? "CPU" : "CPU";
-  const metricValue = `${(host.cpu_pct || 0).toFixed(0)}%`;
-  const mem = host.mem_total ? formatBytes(host.mem_used) : "—";
   return (
-    <GenericCard
-      title={host.name}
-      sub={host.role || host.os || "host"}
-      icon={icon || host.icon || "linux"}
-      online={host.online}
-      metricLabel={metricLabel}
-      metricValue={metricValue}
-      accent={accent}
-      url={host.hostname || host.name}
-      spark={history[`${host.name}:cpu`] || []}
-      footnote={host.error ? host.error : `mem ${mem} · disk ${(host.disk_pct || 0).toFixed(0)}%`}
-      needsKey={false}
-    />
+    <div className="card host-card">
+      <span className={`card-online ${host.online ? "on" : ""}`} />
+      <div className="host-head">
+        <div className="card-icon" style={{ boxShadow: `inset 0 0 0 1px ${accent}33` }}>
+          <img src={iconUrl(icon || host.icon || "linux")} alt="" />
+        </div>
+        <div>
+          <div className="card-title">{host.name}</div>
+          <div className="card-sub">{host.hostname || host.os || host.role}</div>
+        </div>
+      </div>
+      {host.error && <div className="badge">{host.error}</div>}
+      <div className="host-metrics">
+        <div>
+          <div className="metric-label">CPU</div>
+          <div className="metric-value" style={{ color: accent }}>
+            {(host.cpu_pct || 0).toFixed(0)}%
+          </div>
+          <Sparkline points={history[`${host.name}:cpu`] || []} color={accent} />
+        </div>
+        <div>
+          <div className="metric-label">Memory</div>
+          <div className="metric-value" style={{ color: accent }}>
+            {(host.mem_pct || 0).toFixed(0)}%
+          </div>
+          <div className="metric-sub">
+            {formatBytes(host.mem_used)} / {formatBytes(host.mem_total)}
+          </div>
+        </div>
+        <div>
+          <div className="metric-label">Disk</div>
+          <div className="metric-value" style={{ color: accent }}>
+            {(host.disk_pct || 0).toFixed(0)}%
+          </div>
+          <div className="metric-sub">
+            {formatBytes(host.disk_used)} / {formatBytes(host.disk_total)}
+          </div>
+        </div>
+        <div>
+          <div className="metric-label">Network</div>
+          <div className="metric-value net-split" style={{ color: accent }}>
+            <span>↓ {formatRate(host.net_rx_bps)}</span>
+            <span>↑ {formatRate(host.net_tx_bps)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

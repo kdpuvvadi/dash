@@ -135,7 +135,7 @@ func Load(dir string) (*Config, error) {
 
 func (c *Config) applyDefaults() {
 	if c.PollSeconds <= 0 {
-		c.PollSeconds = 60
+		c.PollSeconds = 5
 	}
 	if c.HistoryHours <= 0 {
 		c.HistoryHours = 24
@@ -271,7 +271,7 @@ func starterYAML() string {
 # Edit this file. The dashboard reloads when the file changes.
 # The web UI is read-only — change settings here, not in the browser.
 
-poll_seconds: 60
+poll_seconds: 5
 history_hours: 24
 listen: ":8080"
 

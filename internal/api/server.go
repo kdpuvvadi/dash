@@ -94,11 +94,13 @@ func (s *Server) handleLayout(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Cfg()
 	snap := s.Store.Snapshot()
 	hist := map[string][]store.Point{}
-	for name, h := range snap.Hosts {
-		if pts, err := s.Store.History(name, "cpu", time.Now().Add(-24*time.Hour)); err == nil {
-			hist[name+":cpu"] = pts
+	since := time.Now().Add(-24 * time.Hour)
+	for name := range snap.Hosts {
+		for _, metric := range []string{"cpu", "mem", "disk", "net_rx", "net_tx"} {
+			if pts, err := s.Store.History(name, metric, since); err == nil {
+				hist[name+":"+metric] = pts
+			}
 		}
-		_ = h
 	}
 	repo := s.RepoURL
 	if repo == "" {

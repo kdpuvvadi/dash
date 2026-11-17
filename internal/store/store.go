@@ -26,9 +26,17 @@ type Summary struct {
 	ServicesOnline int     `json:"services_online"`
 	ServicesTotal  int     `json:"services_total"`
 	UptimeHuman    string  `json:"uptime_human"`
+	CPUPct         float64 `json:"cpu_pct"`
+	MemPct         float64 `json:"mem_pct"`
+	MemUsed        string  `json:"mem_used"`
+	MemTotal       string  `json:"mem_total"`
 	StorageUsed    string  `json:"storage_used"`
 	StorageTotal   string  `json:"storage_total"`
 	StoragePct     float64 `json:"storage_pct"`
+	NetRxBps       float64 `json:"net_rx_bps"`
+	NetTxBps       float64 `json:"net_tx_bps"`
+	NetRxHuman     string  `json:"net_rx_human"`
+	NetTxHuman     string  `json:"net_tx_human"`
 }
 
 type HostSnap struct {
@@ -52,6 +60,8 @@ type HostSnap struct {
 	UptimeSec  int64             `json:"uptime_sec"`
 	NetRx      uint64            `json:"net_rx"`
 	NetTx      uint64            `json:"net_tx"`
+	NetRxBps   float64           `json:"net_rx_bps"`
+	NetTxBps   float64           `json:"net_tx_bps"`
 	Error      string            `json:"error,omitempty"`
 	Guests     []Guest           `json:"guests,omitempty"`
 	Containers []Container       `json:"containers,omitempty"`
@@ -234,6 +244,23 @@ func FormatBytes(b uint64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+func FormatRate(bps float64) string {
+	if bps < 0 {
+		bps = 0
+	}
+	units := []string{"B/s", "KB/s", "MB/s", "GB/s"}
+	v := bps
+	i := 0
+	for v >= 1024 && i < len(units)-1 {
+		v /= 1024
+		i++
+	}
+	if i == 0 {
+		return fmt.Sprintf("%.0f %s", v, units[i])
+	}
+	return fmt.Sprintf("%.1f %s", v, units[i])
 }
 
 func FormatUptime(sec int64) string {

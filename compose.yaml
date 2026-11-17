@@ -2,8 +2,8 @@ services:
   dash:
     image: ghcr.io/${GITHUB_OWNER:-kdpuvvadi}/dash:${DASH_TAG:-latest}
     container_name: dash
-    expose:
-      - "8080"
+    pid: host
+    network_mode: host
     volumes:
       - ./config:/config
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -12,9 +12,7 @@ services:
   caddy:
     image: caddybuilds/caddy-cloudflare:latest
     container_name: dash-caddy
-    ports:
-      - "80:80"
-      - "443:443"
+    network_mode: host
     environment:
       CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
       CADDY_EMAIL: ${CADDY_EMAIL:-}

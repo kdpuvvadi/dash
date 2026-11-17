@@ -40,6 +40,10 @@ export type HostSnap = {
   disk_pct: number;
   load1?: number;
   uptime_sec?: number;
+  net_rx?: number;
+  net_tx?: number;
+  net_rx_bps?: number;
+  net_tx_bps?: number;
   error?: string;
   guests?: Guest[];
   containers?: Container[];
@@ -93,9 +97,17 @@ export type Snapshot = {
     services_online: number;
     services_total: number;
     uptime_human: string;
+    cpu_pct?: number;
+    mem_pct?: number;
+    mem_used?: string;
+    mem_total?: string;
     storage_used: string;
     storage_total: string;
     storage_pct: number;
+    net_rx_bps?: number;
+    net_tx_bps?: number;
+    net_rx_human?: string;
+    net_tx_human?: string;
   };
   hosts: Record<string, HostSnap>;
   apps: Record<string, AppSnap>;

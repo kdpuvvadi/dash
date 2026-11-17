@@ -17,6 +17,11 @@ type Hub interface {
 	Broadcast(snap store.Snapshot)
 }
 
+type netSample struct {
+	rx, tx uint64
+	at     time.Time
+}
+
 type Collector struct {
 	cfg     *config.Config
 	store   *store.Store
@@ -24,10 +29,11 @@ type Collector struct {
 	secrets config.Secrets
 	hub     Hub
 	mu      sync.Mutex
+	prevNet map[string]netSample
 }
 
 func New(cfg *config.Config, st *store.Store, defs map[string]*apps.Def, secrets config.Secrets, hub Hub) *Collector {
-	return &Collector{cfg: cfg, store: st, defs: defs, secrets: secrets, hub: hub}
+	return &Collector{cfg: cfg, store: st, defs: defs, secrets: secrets, hub: hub, prevNet: map[string]netSample{}}
 }
 
 func (c *Collector) SetConfig(cfg *config.Config, defs map[string]*apps.Def, secrets config.Secrets) {
@@ -86,11 +92,14 @@ func (c *Collector) CollectOnce() {
 		}
 		snap.Hosts[h.Name] = hs
 		unknown = append(unknown, unk...)
+		c.applyNetRates(h.Name, hs, now)
 		if hs.Online {
 			onlineHosts++
 			_ = c.store.Record(h.Name, "cpu", hs.CPUPct, now)
 			_ = c.store.Record(h.Name, "mem", hs.MemPct, now)
 			_ = c.store.Record(h.Name, "disk", hs.DiskPct, now)
+			_ = c.store.Record(h.Name, "net_rx", hs.NetRxBps, now)
+			_ = c.store.Record(h.Name, "net_tx", hs.NetTxBps, now)
 		}
 
 		// Explicit apps in app.yaml (optional overrides)
@@ -270,11 +279,29 @@ func (c *Collector) collectLocal(name string) (*store.HostSnap, []store.UnknownA
 	return hs, nil
 }
 
+func (c *Collector) applyNetRates(name string, hs *store.HostSnap, now time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	prev, ok := c.prevNet[name]
+	c.prevNet[name] = netSample{rx: hs.NetRx, tx: hs.NetTx, at: now}
+	if !ok || now.Before(prev.at) || hs.NetRx < prev.rx || hs.NetTx < prev.tx {
+		return
+	}
+	sec := now.Sub(prev.at).Seconds()
+	if sec <= 0 {
+		return
+	}
+	hs.NetRxBps = float64(hs.NetRx-prev.rx) / sec
+	hs.NetTxBps = float64(hs.NetTx-prev.tx) / sec
+}
+
 func buildSummary(snap store.Snapshot, started time.Time) store.Summary {
 	total := 0
 	online := 0
-	var diskUsed, diskTotal uint64
+	var diskUsed, diskTotal, memUsed, memTotal uint64
 	var uptime int64
+	var cpuSum, rxBps, txBps float64
+	var cpuN int
 	for _, h := range snap.Hosts {
 		total++
 		if h.Online {
@@ -282,6 +309,14 @@ func buildSummary(snap store.Snapshot, started time.Time) store.Summary {
 		}
 		diskUsed += h.DiskUsed
 		diskTotal += h.DiskTotal
+		memUsed += h.MemUsed
+		memTotal += h.MemTotal
+		rxBps += h.NetRxBps
+		txBps += h.NetTxBps
+		if h.Online {
+			cpuSum += h.CPUPct
+			cpuN++
+		}
 		if h.UptimeSec > uptime {
 			uptime = h.UptimeSec
 		}
@@ -304,8 +339,20 @@ func buildSummary(snap store.Snapshot, started time.Time) store.Summary {
 		ServicesOnline: online,
 		ServicesTotal:  total,
 		UptimeHuman:    store.FormatUptime(uptime),
+		MemUsed:        store.FormatBytes(memUsed),
+		MemTotal:       store.FormatBytes(memTotal),
 		StorageUsed:    store.FormatBytes(diskUsed),
 		StorageTotal:   store.FormatBytes(diskTotal),
+		NetRxBps:       rxBps,
+		NetTxBps:       txBps,
+		NetRxHuman:     store.FormatRate(rxBps),
+		NetTxHuman:     store.FormatRate(txBps),
+	}
+	if cpuN > 0 {
+		sum.CPUPct = cpuSum / float64(cpuN)
+	}
+	if memTotal > 0 {
+		sum.MemPct = float64(memUsed) / float64(memTotal) * 100
 	}
 	if diskTotal > 0 {
 		sum.StoragePct = float64(diskUsed) / float64(diskTotal) * 100

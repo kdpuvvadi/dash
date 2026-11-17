@@ -65,6 +65,18 @@ export function formatBytes(n: number) {
   return `${v.toFixed(1)} ${u[i]}`;
 }
 
+export function formatRate(bps?: number) {
+  if (bps == null || Number.isNaN(bps) || bps < 0) return "—";
+  const u = ["B/s", "KB/s", "MB/s", "GB/s"];
+  let i = 0;
+  let v = bps;
+  while (v >= 1024 && i < u.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return i === 0 ? `${v.toFixed(0)} ${u[i]}` : `${v.toFixed(1)} ${u[i]}`;
+}
+
 export function timeNow() {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
