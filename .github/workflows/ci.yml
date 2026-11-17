@@ -14,12 +14,12 @@ jobs:
           go-version: "1.24.x"
       - name: Build
         run: go build -o dash ./cmd/dash
-      - name: Validate bundled app defs
+      - name: Validate config and built-in app defs
         run: |
           mkdir -p /tmp/dashcfg
           ./dash init -config /tmp/dashcfg
           ./dash validate -config /tmp/dashcfg
-          ./dash apps -config /tmp/dashcfg
+          ./dash apps -config /tmp/dashcfg | grep homeassistant
 
   web:
     runs-on: ubuntu-latest

@@ -18,22 +18,24 @@ type Hub interface {
 }
 
 type Collector struct {
-	cfg   *config.Config
-	store *store.Store
-	defs  map[string]*apps.Def
-	hub   Hub
-	mu    sync.Mutex
+	cfg     *config.Config
+	store   *store.Store
+	defs    map[string]*apps.Def
+	secrets config.Secrets
+	hub     Hub
+	mu      sync.Mutex
 }
 
-func New(cfg *config.Config, st *store.Store, defs map[string]*apps.Def, hub Hub) *Collector {
-	return &Collector{cfg: cfg, store: st, defs: defs, hub: hub}
+func New(cfg *config.Config, st *store.Store, defs map[string]*apps.Def, secrets config.Secrets, hub Hub) *Collector {
+	return &Collector{cfg: cfg, store: st, defs: defs, secrets: secrets, hub: hub}
 }
 
-func (c *Collector) SetConfig(cfg *config.Config, defs map[string]*apps.Def) {
+func (c *Collector) SetConfig(cfg *config.Config, defs map[string]*apps.Def, secrets config.Secrets) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cfg = cfg
 	c.defs = defs
+	c.secrets = secrets
 }
 
 func (c *Collector) Run(ctx context.Context) {
@@ -54,6 +56,7 @@ func (c *Collector) CollectOnce() {
 	c.mu.Lock()
 	cfg := c.cfg
 	defs := c.defs
+	secrets := c.secrets
 	c.mu.Unlock()
 
 	snap := store.Snapshot{
@@ -90,7 +93,10 @@ func (c *Collector) CollectOnce() {
 			_ = c.store.Record(h.Name, "disk", hs.DiskPct, now)
 		}
 
+		// Explicit apps in app.yaml (optional overrides)
+		explicit := map[string]bool{}
 		for _, app := range h.Apps {
+			explicit[app.Type] = true
 			def := defs[app.Type]
 			key := h.Name + ":" + app.Type
 			as := &store.AppSnap{
@@ -109,7 +115,7 @@ func (c *Collector) CollectOnce() {
 				as.Group = h.Group
 			}
 			if def == nil {
-				as.Error = "unknown app type — request or add an app definition"
+				as.Error = "unknown app type — request a built-in or drop a custom def in apps.d"
 				as.Name = app.Type
 				snap.Apps[key] = as
 				continue
@@ -119,11 +125,9 @@ func (c *Collector) CollectOnce() {
 			if as.Icon == "" {
 				as.Icon = def.UI.Icon
 			}
-			creds := apps.Creds{
-				"key":      app.Key,
-				"username": app.Username,
-				"password": app.Password,
-			}
+			creds := mergeCreds(secrets.ForApp(app.Type), apps.Creds{
+				"key": app.Key, "username": app.Username, "password": app.Password,
+			})
 			res := def.CollectMetrics(app.URL, creds)
 			as.Online = res.Online
 			as.NeedsKey = res.NeedsKey
@@ -132,11 +136,7 @@ func (c *Collector) CollectOnce() {
 			snap.Apps[key] = as
 		}
 
-		// auto-match containers to defs when not already configured
-		configured := map[string]bool{}
-		for _, a := range h.Apps {
-			configured[a.Type] = true
-		}
+		// App-managed: match containers to built-in (or custom) defs and collect automatically
 		for _, ct := range hs.Containers {
 			matched := false
 			for _, def := range defs {
@@ -144,21 +144,39 @@ func (c *Collector) CollectOnce() {
 					continue
 				}
 				matched = true
-				if configured[def.ID] {
+				if explicit[def.ID] {
 					break
 				}
-				key := h.Name + ":auto:" + def.ID + ":" + ct.Name
+				url := guessAppURL(h, ct, def)
+				key := h.Name + ":" + def.ID
+				if _, exists := snap.Apps[key]; exists {
+					key = h.Name + ":" + def.ID + ":" + ct.Name
+				}
 				as := &store.AppSnap{
 					ID:       key,
 					Type:     def.ID,
 					Name:     def.Name,
 					HostRef:  h.Name,
+					URL:      url,
 					Icon:     def.UI.Icon,
-					NeedsKey: len(def.Credentials) > 0,
 					Fields:   map[string]string{},
 					Category: h.Category,
 					Group:    h.Group,
-					Error:    "matched container " + ct.Name + " — add apps entry with url and key in app.yaml",
+				}
+				creds := mergeCreds(secrets.ForApp(def.ID), nil)
+				if url == "" {
+					as.NeedsKey = len(def.Credentials) > 0
+					as.Error = "found " + ct.Name + " — set URL in secrets or app.yaml if needed"
+					snap.Apps[key] = as
+					break
+				}
+				res := def.CollectMetrics(url, creds)
+				as.Online = res.Online
+				as.NeedsKey = res.NeedsKey
+				as.Fields = res.Fields
+				as.Error = res.Error
+				if as.NeedsKey {
+					as.Error = "needs API key — add it under " + def.ID + " in config/secrets.yaml"
 				}
 				snap.Apps[key] = as
 				break
@@ -317,4 +335,43 @@ func min(a, b float64) float64 {
 		return a
 	}
 	return b
+}
+
+func mergeCreds(base map[string]string, overlay apps.Creds) apps.Creds {
+	out := apps.Creds{}
+	for k, v := range base {
+		if v != "" {
+			out[k] = v
+		}
+	}
+	for k, v := range overlay {
+		if v != "" {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+func guessAppURL(h config.Host, ct store.Container, def *apps.Def) string {
+	port := 0
+	if len(ct.Ports) > 0 {
+		port = ct.Ports[0]
+	} else if len(def.Match.Ports) > 0 {
+		port = def.Match.Ports[0]
+	}
+	if port == 0 {
+		return ""
+	}
+	host := h.Host
+	if h.Local {
+		host = "127.0.0.1"
+	}
+	if host == "" {
+		return ""
+	}
+	scheme := "http"
+	if port == 443 || port == 8443 || port == 9443 {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s:%d", scheme, host, port)
 }

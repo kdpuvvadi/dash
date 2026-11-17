@@ -1,39 +1,29 @@
 # How to add an app
 
-Dash learns about apps from YAML files. You do not write Go or React for a new app.
+Dash already ships with definitions for common apps (Home Assistant, Pi-hole, Jellyfin, Portainer, qBittorrent, Uptime Kuma, …). Those are built into the image. You do **not** install or edit them.
 
-## Quick path (only on your machine)
+Dash finds matching containers on your machines and collects stats when it can. If an app needs an API key, put it in `config/secrets.yaml`:
 
-1. Copy a file from the project’s `apps/` folder into `config/apps.d/`.
-2. Change `id`, `name`, match rules, and API paths.
-3. Check the file against `schemas/app-def.schema.json`.
-4. In `app.yaml`, add an `apps:` entry with `type`, `url`, and `key` if needed.
-5. Wait for reload (or restart the container).
+```yaml
+homeassistant:
+  key: "your-token"
+```
 
-## What the file must include
+## Custom app (only if Dash does not know it)
 
-- `id` — short name used in config
-- `name` — label on the board
-- `match` — docker image/name/ports so Dash can spot the container
-- `collect` and/or `probe` — HTTP calls to read stats
-- optional `credentials`, `auth`, `ui`
+1. Write a YAML file under `config/apps.d/` (same schema as built-ins).
+2. Follow `schemas/app-def.schema.json`.
+3. Wait for reload — no rebuild of the image.
 
-Invalid files are rejected with a clear error. They are not silently ignored.
+You can copy ideas from `internal/apps/bundled/` in the GitHub repo.
 
-## Ask the project to add it
+## Ask the project to add a built-in
 
-If you do not want to write the file yourself:
+1. Open a GitHub **App request** issue.
+2. Include Docker image name, ports, and what numbers you want.
 
-1. Open a GitHub **App request** issue (template provided).
-2. Include image name, ports, and what numbers you want to see.
-
-## Send a pull request
-
-1. Add the YAML under `apps/`.
-2. Run `dash validate`.
-3. Open a PR using the app definition checklist.
-4. Do not commit real API keys.
+Or send a PR that adds a file under `internal/apps/bundled/`.
 
 ## Remember
 
-The dashboard is read-only. Keys and URLs go in config files, not in the web UI.
+The dashboard is read-only. Keys go in `secrets.yaml`, not in the browser.

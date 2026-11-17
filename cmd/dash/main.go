@@ -87,14 +87,13 @@ func cmdValidate(args []string) int {
 		fmt.Println("config error:", err)
 		return 1
 	}
-	bundled := bundledAppsDir()
-	defs, errs := apps.LoadDefs(bundled, cfg.AppDefDir)
+	defs, errs := apps.LoadAll(cfg.AppDefDir)
 	ok := true
 	for _, e := range errs {
 		fmt.Println("app def error:", e)
 		ok = false
 	}
-	fmt.Printf("OK: %d hosts, %d app defs\n", len(cfg.Hosts), len(defs))
+	fmt.Printf("OK: %d hosts, %d app defs (built-in + custom)\n", len(cfg.Hosts), len(defs))
 	if !ok {
 		return 1
 	}
@@ -104,7 +103,7 @@ func cmdValidate(args []string) int {
 func cmdApps(args []string) int {
 	dir := configDirFromFlags(args)
 	userDir := filepath.Join(dir, "apps.d")
-	defs, errs := apps.LoadDefs(bundledAppsDir(), userDir)
+	defs, errs := apps.LoadAll(userDir)
 	for _, e := range errs {
 		fmt.Println("warning:", e)
 	}
@@ -173,13 +172,14 @@ func cmdServe(args []string) int {
 	}
 	defer st.Close()
 
-	defs, defErrs := apps.LoadDefs(bundledAppsDir(), cfg.AppDefDir)
+	defs, defErrs := apps.LoadAll(cfg.AppDefDir)
 	for _, e := range defErrs {
 		log.Println("app def:", e)
 	}
+	secrets := config.LoadSecrets(*dir)
 
 	hub := api.NewHub()
-	col := collector.New(cfg, st, defs, hub)
+	col := collector.New(cfg, st, defs, secrets, hub)
 	alerter := alerts.New(cfg)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -210,11 +210,12 @@ func cmdServe(args []string) int {
 			log.Println("reload config:", err)
 			return
 		}
-		newDefs, errs := apps.LoadDefs(bundledAppsDir(), newCfg.AppDefDir)
+		newDefs, errs := apps.LoadAll(newCfg.AppDefDir)
 		for _, e := range errs {
 			log.Println("app def:", e)
 		}
-		col.SetConfig(newCfg, newDefs)
+		newSecrets := config.LoadSecrets(*dir)
+		col.SetConfig(newCfg, newDefs, newSecrets)
 		alerter.SetConfig(newCfg)
 		cfg = newCfg
 		defs = newDefs
@@ -263,20 +264,6 @@ func cmdServe(args []string) int {
 	return 0
 }
 
-func bundledAppsDir() string {
-	candidates := []string{
-		"apps",
-		"/app/apps",
-		filepath.Join(filepath.Dir(os.Args[0]), "apps"),
-	}
-	for _, c := range candidates {
-		if st, err := os.Stat(c); err == nil && st.IsDir() {
-			return c
-		}
-	}
-	return "apps"
-}
-
 func watchConfig(dir string, onChange func()) {
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -284,6 +271,7 @@ func watchConfig(dir string, onChange func()) {
 	}
 	_ = w.Add(dir)
 	_ = w.Add(filepath.Join(dir, "apps.d"))
+	// secrets.yaml lives in dir — covered by watching dir
 	var timer *time.Timer
 	for {
 		select {

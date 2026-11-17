@@ -8,11 +8,14 @@ When you run Dash with Docker, your computer’s `./config` folder is mounted in
 
 That folder holds:
 
-- `app.yaml` or `app.yml` — main settings and machine list
-- `apps.d/` — extra app definition files you add
-- `data/` — local database for short history charts
+- `app.yaml` or `app.yml` — main settings and machine list (you edit this)
+- `secrets.yaml` — optional API keys for apps Dash found (you edit this)
+- `apps.d/` — **only** for custom apps Dash does not know yet
+- `data/` — local database for short history charts (managed by Dash)
 - `ssh/` — optional SSH private keys
 - `README.txt` — short reminder created on first start
+
+Built-in app definitions (Home Assistant, Pi-hole, …) are **inside the Dash image**. You do not copy or maintain those files.
 
 The web dashboard is **read-only**. Change settings by editing these files.
 
@@ -87,18 +90,20 @@ For local Docker stats, mount the Docker socket read-only in Compose (see the ex
 
 ## Apps and API keys
 
-After Dash finds a known app (or you add one), put the URL and key in `app.yaml`:
+Dash matches common apps from Docker containers automatically. You usually only list **machines** in `app.yaml`.
+
+If an app needs a key, create `secrets.yaml`:
 
 ```yaml
-    apps:
-      - type: homeassistant
-        url: http://10.20.20.40:8123
-        key: ${HA_TOKEN}
+homeassistant:
+  key: "your-long-lived-token"
+pihole:
+  key: "${PIHOLE_TOKEN}"
 ```
 
-Use `${ENV_NAME}` for secrets from environment variables. Do not put secrets in the browser — there is no form for that.
+You can still override a specific app under a host with an `apps:` block if you need a custom URL. That is optional.
 
-If a key is missing, the card shows a badge telling you to edit the config file.
+If a key is missing, the card shows a badge telling you to edit `secrets.yaml`.
 
 ## Icons
 

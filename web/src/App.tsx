@@ -378,7 +378,7 @@ function GenericCard(props: {
           </div>
           <div className="card-url">{props.url || ""}</div>
           {props.needsKey && (
-            <div className="badge">needs an API key — add it in app.yaml (UI is read-only)</div>
+            <div className="badge">needs an API key — add it in secrets.yaml (UI is read-only)</div>
           )}
           {props.footnote && !props.needsKey && (
             <div className="card-sub" style={{ marginTop: 4 }}>

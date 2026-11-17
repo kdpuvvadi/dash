@@ -63,10 +63,15 @@ type UI struct {
 	Accent string   `yaml:"accent" json:"accent"`
 }
 
+// LoadDefs loads only from a directory (used for config/apps.d custom apps).
+// Pass bundledDir as "" — built-ins come from LoadBundled / LoadAll.
 func LoadDefs(bundledDir, userDir string) (map[string]*Def, []error) {
 	out := map[string]*Def{}
 	var errs []error
-	loadDir := func(dir string, override bool) {
+	loadDir := func(dir string) {
+		if dir == "" {
+			return
+		}
 		entries, err := os.ReadDir(dir)
 		if err != nil {
 			if !os.IsNotExist(err) {
@@ -88,14 +93,11 @@ func LoadDefs(bundledDir, userDir string) (map[string]*Def, []error) {
 				errs = append(errs, fmt.Errorf("%s: %w", path, err))
 				continue
 			}
-			if _, exists := out[def.ID]; exists && !override {
-				continue
-			}
 			out[def.ID] = def
 		}
 	}
-	loadDir(bundledDir, false)
-	loadDir(userDir, true)
+	loadDir(bundledDir)
+	loadDir(userDir)
 	return out, errs
 }
 

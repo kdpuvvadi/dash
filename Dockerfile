@@ -21,8 +21,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /out/dash /app/dash
-COPY apps /app/apps
-COPY schemas /app/schemas
 ENV DASH_CONFIG=/config
 EXPOSE 8080
 VOLUME ["/config"]

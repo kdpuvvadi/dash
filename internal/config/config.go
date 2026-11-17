@@ -246,16 +246,21 @@ func EnsureFirstLaunch(dir string) (created bool, err error) {
 	if err := os.WriteFile(filepath.Join(dir, "app.yaml"), []byte(starter), 0o644); err != nil {
 		return false, err
 	}
+	_ = os.WriteFile(filepath.Join(dir, "secrets.example.yaml"), []byte(secretsExample()), 0o644)
 	readme := strings.TrimSpace(`
 Dash config folder
 ==================
 
 Edit app.yaml to list the machines you want to watch.
-Put API keys in secrets via environment variables like ${HA_TOKEN}.
-Drop extra app definition files into apps.d/ (they must follow the schema).
 
-The web dashboard is read-only. Change settings by editing these files.
-See docs/config.md in the project for a plain-English guide.
+Dash already knows common apps (Home Assistant, Pi-hole, Jellyfin, …).
+It finds them on your machines automatically. You do not manage those app files.
+
+Optional:
+  secrets.yaml     — API keys for apps that need them
+  apps.d/          — only if you add a custom app Dash does not know yet
+
+The web dashboard is read-only.
 `) + "\n"
 	_ = os.WriteFile(filepath.Join(dir, "README.txt"), []byte(readme), 0o644)
 	return true, nil
@@ -312,5 +317,18 @@ hosts:
     category: overview
     group: local
     tags: [local]
+`
+}
+
+func secretsExample() string {
+	return `# Optional API keys. Dash matches apps itself; put keys here by app id.
+# Rename to secrets.yaml (or copy) and fill in. Do not commit real keys.
+#
+# homeassistant:
+#   key: "your-long-lived-token"
+# pihole:
+#   key: "your-api-password"
+# jellyfin:
+#   key: "your-api-key"
 `
 }
