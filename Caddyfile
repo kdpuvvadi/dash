@@ -2,12 +2,12 @@
 	email {$CADDY_EMAIL}
 }
 
-# dns.puvvadi.net is split-horizon BIND (not a Cloudflare zone), so ACME DNS-01
-# is aliased into the public puvvadi.net zone:
-#   CF CNAME: _acme-challenge.dash.dns → _acme-challenge.dash-acme.puvvadi.net
+# dns.puvvadi.net is split-horizon BIND (not a Cloudflare zone).
+# ACME DNS-01 is aliased into the public puvvadi.net zone:
+#   CF: _acme-challenge.dash.dns  CNAME  dash-acme.puvvadi.net
 dash.dns.puvvadi.net {
 	tls {
-		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+		dns cloudflare {$CLOUDFLARE_API_TOKEN}
 		dns_challenge_override_domain dash-acme.puvvadi.net
 		propagation_delay 2m
 		resolvers 1.1.1.1

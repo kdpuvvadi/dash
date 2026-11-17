@@ -4,10 +4,10 @@
 }
 
 # Requires Cloudflare CNAME in zone puvvadi.net:
-#   _acme-challenge.dash.dns  CNAME  _acme-challenge.dash-acme.puvvadi.net
+#   _acme-challenge.dash.dns  CNAME  dash-acme.puvvadi.net
 dash.dns.puvvadi.net {
 	tls {
-		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+		dns cloudflare {$CLOUDFLARE_API_TOKEN}
 		dns_challenge_override_domain dash-acme.puvvadi.net
 		propagation_delay 2m
 		resolvers 1.1.1.1
