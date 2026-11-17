@@ -22,3 +22,6 @@ internal/embedui/dist/**
 .env
 compose.override.yml
 Dockerfile.runtime
+
+scripts/deploy-lxc.ps1
+scripts/deploy-lxc.sh
