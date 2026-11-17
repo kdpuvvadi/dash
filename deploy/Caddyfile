@@ -4,6 +4,9 @@
 	acme_dns cloudflare {
 		api_token {env.CLOUDFLARE_API_TOKEN}
 	}
+	servers {
+		resolvers 10.10.10.10
+	}
 }
 
 puvvadi.net {

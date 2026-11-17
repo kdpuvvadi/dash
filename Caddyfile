@@ -3,6 +3,9 @@
 	acme_dns cloudflare {
 		api_token {env.CLOUDFLARE_API_TOKEN}
 	}
+	servers {
+		resolvers 10.10.10.10
+	}
 }
 
 # 1) Apex first — Cloudflare zone is puvvadi.net (this cert already works).
