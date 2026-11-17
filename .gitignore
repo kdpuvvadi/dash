@@ -1,0 +1,17 @@
+bin/
+dist/
+serve.out
+serve.err
+*.db
+config/app.yaml
+config/app.yml
+config/secrets.yaml
+config/data/
+config/ssh/
+caddy-data/
+caddy-config/
+web/node_modules/
+web/dist/
+*.exe
+.DS_Store
+.env
