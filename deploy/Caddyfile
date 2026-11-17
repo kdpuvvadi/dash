@@ -17,12 +17,7 @@ puvvadi.net {
 	respond "ok" 200
 }
 
-dns.puvvadi.net {
-	import tls_resolvers
-	respond "ok" 200
-}
-
-dash.dns.puvvadi.net {
+dash.puvvadi.net {
 	import tls_resolvers
 	reverse_proxy dash:8080
 }

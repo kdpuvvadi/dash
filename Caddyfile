@@ -11,20 +11,14 @@
 	}
 }
 
-# 1) Apex first — Cloudflare zone is puvvadi.net (this cert already works).
+# Apex zone exists in Cloudflare.
 puvvadi.net {
 	import tls_resolvers
 	respond "ok" 200
 }
 
-# 2) Then dns.puvvadi.net (needs zone puvvadi.net discovery or a CF zone for dns.puvvadi.net).
-dns.puvvadi.net {
-	import tls_resolvers
-	respond "ok" 200
-}
-
-# 3) App hostname — also reachable as dash.puvvadi.net while nested DNS name finishes ACME.
-dash.puvvadi.net, dash.dns.puvvadi.net {
+# App host on the puvvadi.net zone (dns.puvvadi.net is not a CF zone — skip until it is).
+dash.puvvadi.net {
 	import tls_resolvers
 	reverse_proxy dash:8080
 }
