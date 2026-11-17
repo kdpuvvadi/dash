@@ -1,0 +1,31 @@
+id: pihole
+name: Pi-hole
+credentials:
+  - name: key
+    label: API password or app password
+    required: true
+match:
+  docker_image:
+    - pihole/pihole
+  docker_name:
+    - pihole
+  ports: [80, 8080]
+auth:
+  type: query
+  query: auth
+  value: "{{ key }}"
+probe:
+  method: GET
+  path: /admin/api.php?summaryRaw
+  ok_status: [200]
+collect:
+  - id: ads_percentage
+    label: Blocked
+    method: GET
+    path: /admin/api.php?summaryRaw
+    parse: jsonpath
+    value: "$.ads_percentage_today"
+ui:
+  icon: pi-hole
+  fields: [ads_percentage]
+  accent: "#f472b6"

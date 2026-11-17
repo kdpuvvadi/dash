@@ -1,0 +1,31 @@
+id: portainer
+name: Portainer
+credentials:
+  - name: key
+    label: API token
+    required: true
+match:
+  docker_image:
+    - portainer/portainer
+  docker_name:
+    - portainer
+  ports: [9000, 9443]
+auth:
+  type: header
+  header: X-API-Key
+  value: "{{ key }}"
+probe:
+  method: GET
+  path: /api/status
+  ok_status: [200]
+collect:
+  - id: version
+    label: Version
+    method: GET
+    path: /api/status
+    parse: jsonpath
+    value: "$.Version"
+ui:
+  icon: portainer
+  fields: [version]
+  accent: "#38bdf8"

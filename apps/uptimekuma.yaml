@@ -1,0 +1,29 @@
+id: uptimekuma
+name: Uptime Kuma
+credentials:
+  - name: key
+    label: Status page slug (optional for public pages)
+    required: false
+match:
+  docker_image:
+    - louislam/uptime-kuma
+  docker_name:
+    - uptime-kuma
+    - uptimekuma
+  ports: [3001]
+auth:
+  type: none
+probe:
+  method: GET
+  path: /
+  ok_status: [200]
+collect:
+  - id: ok
+    label: Reachable
+    method: GET
+    path: /
+    parse: text
+ui:
+  icon: uptime-kuma
+  fields: [ok]
+  accent: "#34d399"

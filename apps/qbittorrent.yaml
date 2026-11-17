@@ -1,0 +1,33 @@
+id: qbittorrent
+name: qBittorrent
+credentials:
+  - name: username
+    label: Username
+    required: true
+  - name: password
+    label: Password
+    required: true
+match:
+  docker_image:
+    - linuxserver/qbittorrent
+    - qbittorrent
+  docker_name:
+    - qbittorrent
+    - qbit
+  ports: [8080]
+auth:
+  type: none
+probe:
+  method: GET
+  path: /api/v2/app/version
+  ok_status: [200]
+collect:
+  - id: version
+    label: Version
+    method: GET
+    path: /api/v2/app/version
+    parse: text
+ui:
+  icon: qbittorrent
+  fields: [version]
+  accent: "#38bdf8"

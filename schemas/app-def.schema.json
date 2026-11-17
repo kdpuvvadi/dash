@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/puvvadi/dash/schemas/app-def.schema.json",
+  "title": "Dash app definition",
+  "type": "object",
+  "required": ["id", "name"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "credentials": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "label": { "type": "string" },
+          "required": { "type": "boolean" }
+        }
+      }
+    },
+    "match": {
+      "type": "object",
+      "properties": {
+        "docker_image": { "type": "array", "items": { "type": "string" } },
+        "docker_name": { "type": "array", "items": { "type": "string" } },
+        "ports": { "type": "array", "items": { "type": "integer" } }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["bearer", "header", "query", "basic", "none"] },
+        "header": { "type": "string" },
+        "value": { "type": "string" },
+        "query": { "type": "string" }
+      }
+    },
+    "probe": {
+      "type": "object",
+      "properties": {
+        "method": { "type": "string" },
+        "path": { "type": "string" },
+        "body": { "type": "string" },
+        "ok_status": { "type": "array", "items": { "type": "integer" } }
+      }
+    },
+    "collect": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "path"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "method": { "type": "string" },
+          "path": { "type": "string" },
+          "body": { "type": "string" },
+          "parse": { "type": "string", "enum": ["jsonpath", "text", "regex", "json"] },
+          "value": { "type": "string" }
+        }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "properties": {
+        "icon": { "type": "string" },
+        "fields": { "type": "array", "items": { "type": "string" } },
+        "accent": { "type": "string" }
+      }
+    }
+  },
+  "anyOf": [
+    { "required": ["collect"] },
+    { "required": ["probe"] }
+  ]
+}

@@ -1,0 +1,31 @@
+id: homeassistant
+name: Home Assistant
+credentials:
+  - name: key
+    label: Long-lived access token
+    required: true
+match:
+  docker_image:
+    - homeassistant/home-assistant
+    - ghcr.io/home-assistant/home-assistant
+  docker_name:
+    - homeassistant
+    - hass
+  ports: [8123]
+auth:
+  type: bearer
+probe:
+  method: GET
+  path: /api/
+  ok_status: [200]
+collect:
+  - id: config_ok
+    label: API
+    method: GET
+    path: /api/config
+    parse: jsonpath
+    value: "$.location_name"
+ui:
+  icon: home-assistant
+  fields: [config_ok]
+  accent: "#7c3aed"

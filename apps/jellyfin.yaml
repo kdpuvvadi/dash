@@ -1,0 +1,31 @@
+id: jellyfin
+name: Jellyfin
+credentials:
+  - name: key
+    label: API key
+    required: true
+match:
+  docker_image:
+    - jellyfin/jellyfin
+  docker_name:
+    - jellyfin
+  ports: [8096]
+auth:
+  type: header
+  header: X-Emby-Token
+  value: "{{ key }}"
+probe:
+  method: GET
+  path: /System/Info/Public
+  ok_status: [200]
+collect:
+  - id: sessions
+    label: Active streams
+    method: GET
+    path: /Sessions
+    parse: jsonpath
+    value: "$.length"
+ui:
+  icon: jellyfin
+  fields: [sessions]
+  accent: "#a78bfa"
