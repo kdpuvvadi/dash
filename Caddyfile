@@ -1,6 +1,8 @@
 {
 	email {$CADDY_EMAIL}
-	acme_dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	acme_dns cloudflare {
+		api_token {env.CLOUDFLARE_API_TOKEN}
+	}
 }
 
 dash.dns.puvvadi.net {
