@@ -6,6 +6,8 @@ List machines in a YAML file. Dash connects over SSH (or local Docker), shows Pr
 
 ## Quick start
 
+**Docker + Caddy (recommended)**
+
 ```bash
 docker compose up -d --build
 ```
@@ -13,6 +15,18 @@ docker compose up -d --build
 - Config: `./config` → container `/config`
 - First start creates `app.yaml` if missing
 - HTTPS: Caddy in front (`deploy/Caddyfile`), default host `dash.dns.puvvadi.net`
+
+**Binary on the dash LXC**
+
+```bash
+# copy linux amd64 binary built with: make release
+install -m 755 dist/dash /opt/dash/dash
+cp -r apps /opt/dash/
+cp deploy/dash.service /etc/systemd/system/
+systemctl enable --now dash
+```
+
+UI: `http://dash.dns.puvvadi.net:8080` (add Caddy later for HTTPS on 443).
 
 ## Docs
 
