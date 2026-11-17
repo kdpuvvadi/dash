@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/puvvadi/dash/internal/apps"
+	"github.com/puvvadi/dash/internal/apps/catalog"
 	"github.com/puvvadi/dash/internal/config"
 	"github.com/puvvadi/dash/internal/store"
 )
@@ -145,18 +146,21 @@ func (c *Collector) CollectOnce() {
 			snap.Apps[key] = as
 		}
 
-		// App-managed: match containers to built-in (or custom) defs and collect automatically
-		for _, ct := range hs.Containers {
-			matched := false
+		// Enrich containers + match defs / popular catalog for icons.
+		for i := range hs.Containers {
+			ct := &hs.Containers[i]
+			enrichContainer(ct, defs)
+
+			matchedDef := false
 			for _, def := range defs {
 				if !def.Matches(ct.Image, ct.Name, ct.Ports) {
 					continue
 				}
-				matched = true
+				matchedDef = true
 				if explicit[def.ID] {
 					break
 				}
-				url := guessAppURL(h, ct, def)
+				url := guessAppURL(h, *ct, def)
 				key := h.Name + ":" + def.ID
 				if _, exists := snap.Apps[key]; exists {
 					key = h.Name + ":" + def.ID + ":" + ct.Name
@@ -172,9 +176,13 @@ func (c *Collector) CollectOnce() {
 					Category: h.Category,
 					Group:    h.Group,
 				}
+				if as.Icon == "" {
+					as.Icon = ct.Icon
+				}
 				creds := mergeCreds(secrets.ForApp(def.ID), nil)
 				if url == "" {
 					as.NeedsKey = len(def.Credentials) > 0
+					as.Online = strings.Contains(strings.ToLower(ct.Status), "up")
 					as.Error = "found " + ct.Name + " — set URL in secrets or app.yaml if needed"
 					snap.Apps[key] = as
 					break
@@ -190,12 +198,14 @@ func (c *Collector) CollectOnce() {
 				snap.Apps[key] = as
 				break
 			}
-			if !matched && strings.Contains(strings.ToLower(ct.Status), "up") {
+			if !matchedDef && !ct.Known && strings.Contains(strings.ToLower(ct.Status), "up") {
 				unknown = append(unknown, store.UnknownApp{
 					HostRef: h.Name,
 					Name:    ct.Name,
 					Image:   ct.Image,
 					Ports:   ct.Ports,
+					Icon:    ct.Icon,
+					AppName: ct.AppName,
 				})
 			}
 		}
@@ -366,6 +376,29 @@ func min(a, b float64) float64 {
 		return a
 	}
 	return b
+}
+
+func enrichContainer(ct *store.Container, defs map[string]*apps.Def) {
+	for _, def := range defs {
+		if def.Matches(ct.Image, ct.Name, ct.Ports) {
+			ct.AppID = def.ID
+			ct.AppName = def.Name
+			ct.Icon = def.UI.Icon
+			if ct.Icon == "" {
+				ct.Icon = def.ID
+			}
+			ct.Known = true
+			return
+		}
+	}
+	m := catalog.Resolve(ct.Image, ct.Name)
+	ct.AppID = m.ID
+	ct.AppName = m.Name
+	ct.Icon = m.Icon
+	if ct.Icon == "" {
+		ct.Icon = "docker"
+	}
+	ct.Known = m.Known
 }
 
 func mergeCreds(base map[string]string, overlay apps.Creds) apps.Creds {

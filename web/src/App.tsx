@@ -261,10 +261,16 @@ function BlockCard({
           {cts.length === 0 && <span style={{ color: "var(--muted)" }}>No containers</span>}
           {cts.map((c) => (
             <div key={c.id} className="container-row">
-              <span className={`container-dot ${/up/i.test(c.status) ? "on" : ""}`} />
+              <div className="container-icon">
+                <img src={iconUrl(c.icon || "docker")} alt="" />
+                <span className={`container-dot ${/up/i.test(c.status) ? "on" : ""}`} />
+              </div>
               <div className="container-meta">
-                <strong>{c.name}</strong>
-                <span>{c.image}</span>
+                <strong>{c.app_name || c.name}</strong>
+                <span>
+                  {c.name}
+                  {c.image ? ` · ${c.image}` : ""}
+                </span>
               </div>
               <div className="container-stats">
                 {(c.cpu_pct || 0).toFixed(0)}%
@@ -311,12 +317,20 @@ function BlockCard({
     return (
       <div className="card">
         <div className="card-title">Unknown apps</div>
-        <div className="card-sub">Not matched to an app definition</div>
-        <div className="unknown-list" style={{ marginTop: 12 }}>
+        <div className="card-sub">No catalog / icon match yet</div>
+        <div className="container-list" style={{ marginTop: 12 }}>
           {list.length === 0 && <span style={{ color: "var(--muted)" }}>None right now</span>}
-          {list.slice(0, 6).map((u, i) => (
-            <div key={i}>
-              <strong>{u.name}</strong> · {u.image}
+          {list.slice(0, 8).map((u, i) => (
+            <div key={i} className="container-row">
+              <div className="container-icon">
+                <img src={iconUrl(u.icon || "docker")} alt="" />
+              </div>
+              <div className="container-meta">
+                <strong>{u.app_name || u.name}</strong>
+                <span>
+                  {u.name} · {u.image}
+                </span>
+              </div>
             </div>
           ))}
         </div>

@@ -79,16 +79,20 @@ type Guest struct {
 }
 
 type Container struct {
-	ID      string  `json:"id"`
-	Name    string  `json:"name"`
-	Image   string  `json:"image"`
-	Status  string  `json:"status"`
-	CPUPct  float64 `json:"cpu_pct"`
-	MemUsage string `json:"mem_usage"`
-	NetIO   string  `json:"net_io"`
-	Ports   []int   `json:"ports,omitempty"`
-	HostRef string  `json:"host_ref"`
-	GuestID string  `json:"guest_id,omitempty"`
+	ID       string  `json:"id"`
+	Name     string  `json:"name"`
+	Image    string  `json:"image"`
+	Status   string  `json:"status"`
+	CPUPct   float64 `json:"cpu_pct"`
+	MemUsage string  `json:"mem_usage"`
+	NetIO    string  `json:"net_io"`
+	Ports    []int   `json:"ports,omitempty"`
+	HostRef  string  `json:"host_ref"`
+	GuestID  string  `json:"guest_id,omitempty"`
+	AppID    string  `json:"app_id,omitempty"`
+	AppName  string  `json:"app_name,omitempty"`
+	Icon     string  `json:"icon,omitempty"`
+	Known    bool    `json:"known"`
 }
 
 type AppSnap struct {
@@ -111,6 +115,8 @@ type UnknownApp struct {
 	Name    string `json:"name"`
 	Image   string `json:"image"`
 	Ports   []int  `json:"ports"`
+	Icon    string `json:"icon,omitempty"`
+	AppName string `json:"app_name,omitempty"`
 }
 
 type AlertEvent struct {

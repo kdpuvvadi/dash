@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/puvvadi/dash/internal/apps"
+	"github.com/puvvadi/dash/internal/apps/catalog"
 	"github.com/puvvadi/dash/internal/config"
 	"github.com/puvvadi/dash/internal/store"
 )
@@ -56,7 +57,11 @@ func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
 	for _, d := range defs {
 		list = append(list, d)
 	}
-	writeJSON(w, list)
+	writeJSON(w, map[string]any{
+		"defs":           list,
+		"catalog_count":  catalog.Count(),
+		"catalog_source": "selfhosted survey + dashboard-icons + common docker images",
+	})
 }
 
 func (s *Server) handlePending(w http.ResponseWriter, r *http.Request) {

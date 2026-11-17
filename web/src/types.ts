@@ -65,7 +65,12 @@ export type Container = {
   status: string;
   cpu_pct: number;
   mem_usage?: string;
+  net_io?: string;
   ports?: number[];
+  app_id?: string;
+  app_name?: string;
+  icon?: string;
+  known?: boolean;
 };
 
 export type AppSnap = {
@@ -88,6 +93,8 @@ export type UnknownApp = {
   name: string;
   image: string;
   ports?: number[];
+  icon?: string;
+  app_name?: string;
 };
 
 export type Snapshot = {
