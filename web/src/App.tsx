@@ -401,9 +401,9 @@ function HostCard({
         <div>
           <div className="card-title">{host.name}</div>
           <div className="card-sub">{host.hostname || host.os || host.role}</div>
+          {host.error && <div className="badge">{host.error}</div>}
         </div>
       </div>
-      {host.error && <div className="badge">{host.error}</div>}
       <div className="host-metrics">
         <div>
           <div className="metric-label">CPU</div>
