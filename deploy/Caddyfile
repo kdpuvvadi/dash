@@ -1,10 +1,6 @@
-# Public hostname — Caddy will get a certificate when 80/443 are reachable.
+# Homelab / Tailscale hostname — internal TLS (browser will warn once; trust or use your own certs).
+# For a public hostname with Let's Encrypt, remove the "tls internal" line.
 dash.dns.puvvadi.net {
+	tls internal
 	reverse_proxy dash:8080
 }
-
-# For LAN / Tailscale only (no public ACME), use this instead:
-# dash.dns.puvvadi.net {
-# 	tls internal
-# 	reverse_proxy dash:8080
-# }

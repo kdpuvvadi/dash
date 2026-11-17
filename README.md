@@ -6,7 +6,7 @@ List machines in a YAML file. Dash connects over SSH (or local Docker), shows Pr
 
 ## Quick start
 
-One container. No systemd.
+Docker Compose: **dash** (no host ports) + **Caddy** (80/443, TLS). No systemd.
 
 On the LXC (as root, home is `/root`):
 
@@ -18,9 +18,9 @@ docker compose up -d --build
 - App folder: `~/dash/`
 - Config: `~/dash/config` → `/config` in the container
 - First start creates `app.yaml` if missing
-- UI: `http://dash.dns.puvvadi.net:8080`
+- UI: `https://dash.dns.puvvadi.net` (Caddy; dash is not published on 8080)
 
-Build the linux binary first on your PC (`make release` or `GOOS=linux GOARCH=amd64 go build -o dist/dash ./cmd/dash`), then copy `dist/dash` into `~/dash/dist/` before `docker compose build`. Optional TLS: add Caddy later; `deploy/Caddyfile` is still in the repo.
+Build the linux binary first on your PC (`make release` or `GOOS=linux GOARCH=amd64 go build -o dist/dash ./cmd/dash`), then copy `dist/dash` into `~/dash/dist/` before `docker compose build`. Default Caddyfile uses `tls internal` for LAN/Tailscale; drop that line for public Let's Encrypt.
 
 ## Docs
 
